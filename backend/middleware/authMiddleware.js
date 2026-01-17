@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const sequelize = require('../config/db');
 
 /**
  * Middleware to protect routes - verifies JWT token
@@ -16,15 +16,37 @@ const protect = async (req, res, next) => {
             // Verify token
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret123');
             
-            // Get user from token (exclude password)
-            req.user = await User.findByPk(decoded.id, {
-                attributes: { exclude: ['password'] }
-            });
+            console.log('🔐 Token decoded:', { id: decoded.id, role: decoded.role });
+            
+            // Get user from appropriate table based on role
+            let userData = null;
+            
+            if (decoded.role === 'PATIENT') {
+                const [patients] = await sequelize.query(
+                    'SELECT id, full_name as name, email, phone, address, blood_group FROM patients WHERE id = ?',
+                    { replacements: [decoded.id] }
+                );
+                userData = patients[0];
+            } else if (decoded.role === 'DOCTOR') {
+                const [doctors] = await sequelize.query(
+                    'SELECT id, full_name as name, email, phone, city, specialization FROM doctors WHERE id = ?',
+                    { replacements: [decoded.id] }
+                );
+                userData = doctors[0];
+            }
 
-            if (!req.user) {
+            if (!userData) {
+                console.log('❌ User not found in database');
                 return res.status(401).json({ message: 'User not found' });
             }
 
+            // Attach user data with role to request
+            req.user = {
+                ...userData,
+                role: decoded.role
+            };
+
+            console.log('✅ User authenticated:', { id: req.user.id, role: req.user.role });
             next();
         } catch (error) {
             console.error('Auth Error:', error.message);

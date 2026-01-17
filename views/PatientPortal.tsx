@@ -926,9 +926,9 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                           
                           {/* Rich Profile Details Summary */}
                           <div className="text-xs text-slate-500 mb-4 space-y-1.5">
-                              <p className="flex items-center gap-1.5 font-medium"><GraduationCap size={12}/> {doctor.degrees.join(', ')}</p>
+                              <p className="flex items-center gap-1.5 font-medium"><GraduationCap size={12}/> {doctor.degrees?.join(', ') || 'MBBS'}</p>
                               <p className="flex items-center gap-1.5"><MapPin size={12}/> {doctor.hospital}</p>
-                              <p className="flex items-center gap-1.5"><Languages size={12}/> {doctor.languages.join(', ')}</p>
+                              <p className="flex items-center gap-1.5"><Languages size={12}/> {doctor.languages?.join(', ') || 'Bangla, English'}</p>
                           </div>
 
                           <div className="mt-auto pt-4 border-t border-slate-50">

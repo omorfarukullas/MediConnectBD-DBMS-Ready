@@ -1,53 +1,58 @@
-const { Appointment } = require('../models');
+const sequelize = require('../config/db');
 
 // @desc    Get My Appointments
 const getMyAppointments = async (req, res) => {
-    console.log('📋 Fetching appointments for user:', req.user.id);
+    console.log('📋 Fetching appointments for user:', req.user.id, 'Role:', req.user.role);
     
     try {
-        const { Doctor, User } = require('../models');
+        // Determine which field to filter by based on user role
+        const whereField = req.user.role === 'DOCTOR' ? 'doctor_id' : 'patient_id';
         
-        const appointments = await Appointment.findAll({
-            where: { patientId: req.user.id },
-            include: [{
-                model: Doctor,
-                as: 'doctor',
-                attributes: ['id', 'specialization', 'bmdcNumber', 'experienceYears'],
-                include: [{
-                    model: User,
-                    attributes: ['name', 'email', 'phone', 'image'],
-                    required: false
-                }],
-                required: false // LEFT JOIN to handle cases where doctor might be deleted
-            }],
-            order: [['date', 'DESC'], ['time', 'DESC']]
-        });
+        const [appointments] = await sequelize.query(`
+            SELECT 
+                a.id,
+                a.patient_id,
+                a.doctor_id,
+                a.appointment_date as date,
+                a.appointment_time as time,
+                a.reason_for_visit,
+                a.status,
+                a.created_at,
+                a.updated_at,
+                p.full_name as patient_name,
+                p.email as patient_email,
+                p.phone as patient_phone,
+                d.full_name as doctor_name,
+                d.email as doctor_email,
+                d.specialization as doctor_specialization,
+                d.city as doctor_city
+            FROM appointments a
+            LEFT JOIN patients p ON a.patient_id = p.id
+            LEFT JOIN doctors d ON a.doctor_id = d.id
+            WHERE a.${whereField} = ?
+            ORDER BY a.appointment_date DESC, a.appointment_time DESC
+        `, { replacements: [req.user.id] });
         
         console.log(`✅ Found ${appointments.length} appointments`);
         
         // Format appointments for frontend
-        const formattedAppointments = appointments.map(apt => {
-            const doctorData = apt.doctor || {};
-            const userData = doctorData.User || {};
-            const rawDoctor = doctorData.dataValues || {};
-            
-            return {
-                id: apt.id,
-                patientId: apt.patientId,
-                doctorId: apt.doctorId,
-                doctorName: userData.name || rawDoctor.full_name || 'Doctor',
-                doctorSpecialization: doctorData.specialization || 'General Medicine',
-                doctorImage: userData.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'Doctor')}&background=0D8ABC&color=fff`,
-                date: apt.date,
-                time: apt.time,
-                consultationType: 'In-Person', // Default value since column doesn't exist in DB
-                reasonForVisit: apt.reasonForVisit || '',
-                status: apt.status,
-                queueNumber: 1, // Default value since column doesn't exist in DB
-                createdAt: apt.createdAt,
-                updatedAt: apt.updatedAt
-            };
-        });
+        const formattedAppointments = appointments.map(apt => ({
+            id: apt.id,
+            patientId: apt.patient_id,
+            doctorId: apt.doctor_id,
+            doctorName: apt.doctor_name || 'Unknown Doctor',
+            doctorSpecialization: apt.doctor_specialization || 'General Medicine',
+            doctorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(apt.doctor_name || 'Doctor')}&background=0D8ABC&color=fff`,
+            patientName: apt.patient_name || 'Unknown Patient',
+            date: apt.date,
+            time: apt.time,
+            consultationType: 'In-Person',
+            reasonForVisit: apt.reason_for_visit || '',
+            status: apt.status,
+            queueNumber: 1,
+            createdAt: apt.created_at,
+            updatedAt: apt.updated_at
+        }));
         
         res.json({
             success: true,
@@ -86,21 +91,23 @@ const bookAppointment = async (req, res) => {
 
     try {
         // Get doctor details for the appointment
-        const { Doctor, User } = require('../models');
-        const doctor = await Doctor.findByPk(doctorId, {
-            include: [{
-                model: User,
-                attributes: ['name'],
-                required: false
-            }]
-        });
+        const [doctors] = await sequelize.query(
+            'SELECT * FROM doctors WHERE id = ?',
+            { replacements: [doctorId] }
+        );
         
-        if (!doctor) {
+        if (doctors.length === 0) {
             return res.status(404).json({ message: 'Doctor not found' });
         }
 
-        // Get doctor name from User or legacy full_name
-        const doctorName = doctor.User?.name || doctor.dataValues?.full_name || 'Doctor';
+        const doctor = doctors[0];
+        const doctorName = doctor.full_name || 'Doctor';
+        
+        console.log('👨‍⚕️ Doctor Info:', { 
+            id: doctor.id, 
+            fullName: doctor.full_name, 
+            selectedName: doctorName 
+        });
         
         // Convert time from "10:00 AM" to "10:00:00" (24-hour format)
         let convertedTime = appointmentTime;
@@ -120,56 +127,52 @@ const bookAppointment = async (req, res) => {
         
         console.log('🕐 Time conversion:', appointmentTime, '->', convertedTime);
         
-        // Create appointment with proper field mapping
-        const appointment = await Appointment.create({
-            patientId: req.user.id,
-            doctorId: doctorId,
-            date: appointmentDate,
-            time: convertedTime,
-            reasonForVisit: symptoms || 'General checkup',
-            status: 'PENDING'
-        });
+        // Check if the time slot is already booked
+        const [existingAppointments] = await sequelize.query(
+            `SELECT * FROM appointments 
+             WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? 
+             AND status IN ('PENDING', 'ACCEPTED')`,
+            { replacements: [doctorId, appointmentDate, convertedTime] }
+        );
+        
+        if (existingAppointments.length > 0) {
+            console.log('❌ Time slot already booked');
+            return res.status(409).json({ 
+                success: false,
+                message: 'This time slot is already booked. Please select a different time.',
+                error: 'Time slot unavailable'
+            });
+        }
+        
+        // Create appointment
+        const [result] = await sequelize.query(
+            `INSERT INTO appointments (patient_id, doctor_id, appointment_date, appointment_time, reason_for_visit, status) 
+             VALUES (?, ?, ?, ?, ?, 'PENDING')`,
+            { replacements: [req.user.id, doctorId, appointmentDate, convertedTime, symptoms || 'General checkup'] }
+        );
 
-        console.log('✅ Appointment created successfully:', appointment.id);
-
-        // Fetch the created appointment with doctor details for response
-        const createdAppointment = await Appointment.findByPk(appointment.id, {
-            include: [{
-                model: Doctor,
-                as: 'doctor',
-                attributes: ['id', 'specialization'],
-                include: [{
-                    model: User,
-                    attributes: ['name'],
-                    required: false
-                }],
-                required: false
-            }]
-        });
+        const appointmentId = result;
+        console.log('✅ Appointment created successfully:', appointmentId);
 
         res.status(201).json({
             success: true,
             message: 'Appointment booked successfully',
             data: {
-                id: appointment.id,
-                patientId: appointment.patientId,
-                doctorId: appointment.doctorId,
+                id: appointmentId,
+                patientId: req.user.id,
+                doctorId: doctorId,
                 doctorName: doctorName,
-                date: appointment.date,
-                time: appointment.time,
-                consultationType: 'In-Person', // Default value
-                status: appointment.status,
-                queueNumber: 1 // Default value
+                date: appointmentDate,
+                time: convertedTime,
+                consultationType: 'In-Person',
+                status: 'PENDING',
+                queueNumber: 1
             }
         });
     } catch (error) {
         console.error('❌ Error creating appointment:', error);
         console.error('❌ Error stack:', error.stack);
-        console.error('❌ Error name:', error.name);
-        if (error.parent) {
-            console.error('❌ SQL Error:', error.parent.sqlMessage);
-            console.error('❌ SQL:', error.parent.sql);
-        }
+        
         res.status(500).json({ 
             success: false,
             message: 'Failed to book appointment', 
@@ -184,69 +187,60 @@ const updateAppointment = async (req, res) => {
     const { status, date, time } = req.body;
 
     try {
-        const appointment = await Appointment.findByPk(id);
+        const [appointments] = await sequelize.query(
+            'SELECT * FROM appointments WHERE id = ?',
+            { replacements: [id] }
+        );
 
-        if (!appointment) {
+        if (appointments.length === 0) {
             return res.status(404).json({ message: 'Appointment not found' });
         }
 
-        // Check if user owns this appointment
-        if (appointment.userId !== req.user.id && req.user.role !== 'DOCTOR' && req.user.role !== 'ADMIN') {
+        const appointment = appointments[0];
+
+        // Authorization check
+        if (appointment.patient_id !== req.user.id && req.user.role !== 'DOCTOR' && req.user.role !== 'ADMIN') {
             return res.status(403).json({ message: 'Not authorized to update this appointment' });
         }
 
-        // Update fields
-        if (status) appointment.status = status;
-        if (date) appointment.date = date;
-        if (time) appointment.time = time;
+        // Build update query
+        const updates = [];
+        const values = [];
 
-        await appointment.save();
-
-        // Send real-time notification based on status change
-        const notificationService = req.app.get('notificationService');
-        if (notificationService && status) {
-            let notificationData = {};
-
-            if (status === 'CANCELLED') {
-                notificationData = {
-                    type: 'APPOINTMENT_CANCELLED',
-                    title: 'Appointment Cancelled',
-                    message: `Your appointment with ${appointment.doctorName} on ${appointment.date} has been cancelled.`,
-                    relatedId: appointment.id,
-                    relatedType: 'Appointment'
-                };
-            } else if (status === 'COMPLETED') {
-                notificationData = {
-                    type: 'REVIEW_REQUEST',
-                    title: 'How was your appointment?',
-                    message: `Please rate your experience with ${appointment.doctorName}`,
-                    relatedId: appointment.id,
-                    relatedType: 'Appointment'
-                };
-            } else if (status === 'CONFIRMED') {
-                notificationData = {
-                    type: 'APPOINTMENT_CONFIRMED',
-                    title: 'Appointment Confirmed',
-                    message: `Your appointment with ${appointment.doctorName} has been confirmed for ${appointment.date} at ${appointment.time}`,
-                    relatedId: appointment.id,
-                    relatedType: 'Appointment'
-                };
-            }
-
-            if (Object.keys(notificationData).length > 0) {
-                await notificationService.createAndEmit(appointment.userId, notificationData);
-            }
-
-            // Emit appointment update to patient
-            notificationService.emitAppointmentUpdate(appointment.userId, {
-                id: appointment.id,
-                status: appointment.status,
-                date: appointment.date,
-                time: appointment.time
-            });
+        if (status) {
+            updates.push('status = ?');
+            values.push(status);
+        }
+        if (date) {
+            updates.push('appointment_date = ?');
+            values.push(date);
+        }
+        if (time) {
+            updates.push('appointment_time = ?');
+            values.push(time);
         }
 
-        res.json(appointment);
+        if (updates.length === 0) {
+            return res.status(400).json({ message: 'No fields to update' });
+        }
+
+        values.push(id);
+
+        await sequelize.query(
+            `UPDATE appointments SET ${updates.join(', ')} WHERE id = ?`,
+            { replacements: values }
+        );
+
+        // Fetch updated appointment
+        const [updatedAppointments] = await sequelize.query(
+            'SELECT * FROM appointments WHERE id = ?',
+            { replacements: [id] }
+        );
+
+        res.json({
+            success: true,
+            data: updatedAppointments[0]
+        });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -259,52 +253,41 @@ const cancelAppointment = async (req, res) => {
     try {
         console.log('🚫 Cancel appointment request for ID:', id, 'by user:', req.user.id);
         
-        const appointment = await Appointment.findByPk(id);
+        const [appointments] = await sequelize.query(
+            'SELECT * FROM appointments WHERE id = ?',
+            { replacements: [id] }
+        );
 
-        if (!appointment) {
+        if (appointments.length === 0) {
             console.log('❌ Appointment not found');
             return res.status(404).json({ message: 'Appointment not found' });
         }
 
-        console.log('📋 Appointment details:', { patientId: appointment.patientId, status: appointment.status });
+        const appointment = appointments[0];
+        console.log('📋 Appointment details:', { patientId: appointment.patient_id, status: appointment.status });
 
-        // Check if user owns this appointment (use patientId instead of userId)
-        if (appointment.patientId !== req.user.id && req.user.role !== 'DOCTOR' && req.user.role !== 'ADMIN') {
-            console.log('❌ Not authorized. Patient ID:', appointment.patientId, 'User ID:', req.user.id);
+        // Check if user owns this appointment
+        if (appointment.patient_id !== req.user.id && req.user.role !== 'DOCTOR' && req.user.role !== 'ADMIN') {
+            console.log('❌ Not authorized. Patient ID:', appointment.patient_id, 'User ID:', req.user.id);
             return res.status(403).json({ message: 'Not authorized to cancel this appointment' });
         }
 
-        // Update status to REJECTED (which exists in DB schema)
-        appointment.status = 'REJECTED';
-        await appointment.save();
+        // Update status to REJECTED
+        await sequelize.query(
+            'UPDATE appointments SET status = ? WHERE id = ?',
+            { replacements: ['REJECTED', id] }
+        );
 
         console.log('✅ Appointment cancelled successfully');
-
-        // Send real-time notification
-        const notificationService = req.app.get('notificationService');
-        if (notificationService) {
-            await notificationService.createAndEmit(appointment.patientId, {
-                type: 'APPOINTMENT_CANCELLED',
-                title: 'Appointment Cancelled',
-                message: `Your appointment on ${appointment.date} has been cancelled.`,
-                relatedId: appointment.id,
-                relatedType: 'Appointment'
-            });
-
-            notificationService.emitAppointmentUpdate(appointment.patientId, {
-                id: appointment.id,
-                status: 'REJECTED'
-            });
-        }
 
         res.json({ 
             success: true,
             message: 'Appointment cancelled successfully', 
             appointment: {
-                id: appointment.id,
-                status: appointment.status,
-                date: appointment.date,
-                time: appointment.time
+                id: id,
+                status: 'REJECTED',
+                date: appointment.appointment_date,
+                time: appointment.appointment_time
             }
         });
     } catch (error) {

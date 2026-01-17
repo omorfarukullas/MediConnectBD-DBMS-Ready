@@ -36,9 +36,9 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// API Routes
-app.use('/api/auth', userRoutes);
-app.use('/api/doctors', doctorRoutes);
+// API Routes - Updated to work with patients/doctors tables
+app.use('/api/auth', userRoutes); // Updated userController to use patients table
+app.use('/api/doctors', doctorRoutes); // Updated doctorController to use doctors table
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/emergency', emergencyRoutes);
 app.use('/api/reviews', reviewRoutes);

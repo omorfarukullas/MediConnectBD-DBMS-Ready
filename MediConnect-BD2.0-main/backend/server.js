@@ -50,6 +50,7 @@ app.use('/api/v2/auth', newAuthRoutes);
 app.use('/api/v2/doctors', newDoctorRoutes);
 app.use('/api/v2/appointments', newAppointmentRoutes);
 app.use('/api/v2/patients', patientRoutes);
+app.use('/api/v2/notifications', notificationRoutes);
 
 // ===== OLD ROUTES (Active for compatibility) =====
 // app.use('/api/auth', userRoutes);
@@ -57,7 +58,6 @@ app.use('/api/v2/patients', patientRoutes);
 // app.use('/api/appointments', appointmentRoutes);
 // app.use('/api/emergency', emergencyRoutes);
 // app.use('/api/reviews', reviewRoutes);
-// app.use('/api/notifications', notificationRoutes);
 // Document management routes (file uploads)
 app.use('/api/documents', documentRoutes);
 

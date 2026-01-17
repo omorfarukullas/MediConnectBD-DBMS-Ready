@@ -88,6 +88,59 @@ router.get('/', async (req, res) => {
     }
 });
 
+// ===== GET MY APPOINTMENTS (AUTHENTICATED USER) =====
+router.get('/my', protect, async (req, res) => {
+    try {
+        console.log('📋 Fetching appointments for user:', req.user.id, 'Role:', req.user.role);
+        
+        let whereClause = {};
+        if (req.user.role === 'PATIENT') {
+            whereClause.patient_id = req.user.id;
+        } else if (req.user.role === 'DOCTOR') {
+            whereClause.doctor_id = req.user.id;
+        }
+
+        const appointments = await AppointmentNew.findAll({
+            where: whereClause,
+            include: [
+                { model: Patient, as: 'patient', attributes: ['id', 'full_name', 'email', 'phone'] },
+                { model: DoctorNew, as: 'doctor', attributes: ['id', 'full_name', 'specialization', 'city', 'hospital'] }
+            ],
+            order: [['appointment_date', 'DESC'], ['appointment_time', 'DESC']]
+        });
+
+        console.log(`✅ Found ${appointments.length} appointments`);
+
+        res.json({
+            success: true,
+            data: appointments.map(apt => ({
+                id: apt.id,
+                patientId: apt.patient_id,
+                doctorId: apt.doctor_id,
+                doctorName: apt.doctor?.full_name || 'Unknown Doctor',
+                doctorSpecialization: apt.doctor?.specialization || 'General Medicine',
+                doctorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(apt.doctor?.full_name || 'Doctor')}&background=0D8ABC&color=fff`,
+                patientName: apt.patient?.full_name || 'Unknown Patient',
+                date: apt.appointment_date,
+                time: apt.appointment_time,
+                consultationType: 'In-Person',
+                reasonForVisit: apt.reason_for_visit || '',
+                status: apt.status,
+                queueNumber: 1,
+                createdAt: apt.created_at,
+                updatedAt: apt.updated_at
+            }))
+        });
+    } catch (error) {
+        console.error('❌ Error fetching my appointments:', error);
+        res.status(500).json({ 
+            success: false,
+            message: 'Failed to fetch appointments',
+            error: error.message 
+        });
+    }
+});
+
 // ===== GET APPOINTMENTS BY PATIENT =====
 router.get('/patient/:patientId', async (req, res) => {
     try {

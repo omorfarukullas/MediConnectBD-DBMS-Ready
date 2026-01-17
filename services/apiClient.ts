@@ -172,6 +172,16 @@ class ApiService {
     return response;
   }
 
+  async loginDoctor(email: string, password: string): Promise<LoginResponse> {
+    const response = await this.http.post<LoginResponse>('/doctors/login', {
+      email,
+      password,
+    });
+    TokenManager.setToken(response.token);
+    TokenManager.setUser(response as User);
+    return response;
+  }
+
   logout(): void {
     TokenManager.clear();
   }

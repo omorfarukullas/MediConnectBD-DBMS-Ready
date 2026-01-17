@@ -22,16 +22,9 @@ export const DoctorLogin: React.FC<DoctorLoginProps> = ({ onBack, onLoginSuccess
     setIsLoading(true);
 
     try {
-      // Call real API
-      const response = await api.login(email, password);
+      // Call doctor login API endpoint
+      const response = await api.loginDoctor(email, password);
       
-      // Check if user is a doctor
-      if (response.role !== 'DOCTOR') {
-        setError('This portal is for doctors only. Please use the correct login page.');
-        setIsLoading(false);
-        return;
-      }
-
       // Success - pass user data to parent
       onLoginSuccess(response);
     } catch (err: any) {
