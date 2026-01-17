@@ -21,8 +21,13 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-// Middleware
-app.use(cors());
+// Middleware - CORS Configuration for Direct Frontend Connection
+app.use(cors({
+    origin: 'http://localhost:3000',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));
@@ -129,10 +134,17 @@ const PORT = process.env.PORT || 5000;
 // Test database connection without syncing
 sequelize.authenticate()
     .then(() => {
-        console.log('MySQL Database Connected on port 3307.');
+        console.log('✅ MySQL Database Connected on port 3307');
         server.listen(PORT, () => {
-            console.log(`🚀 Server running on port ${PORT}`);
-            console.log(`📡 API Health Check: http://localhost:${PORT}/api/health`);
+            console.log(`\n${'='.repeat(60)}`);
+            console.log(`🚀 MediConnect Backend Server (Direct Connection)`);
+            console.log(`${'='.repeat(60)}`);
+            console.log(`📍 Backend API: http://localhost:${PORT}/api`);
+            console.log(`💚 Health Check: http://localhost:${PORT}/api/health`);
+            console.log(`🌐 CORS Allowed: http://localhost:3000 (Frontend)`);
+            console.log(`📂 File Uploads: http://localhost:${PORT}/uploads`);
+            console.log(`🔌 WebSocket: Enabled`);
+            console.log(`${'='.repeat(60)}\n`);
         });
     })
     .catch(err => {

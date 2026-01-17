@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, MapPin, Video, Calendar, Clock, AlertCircle, ArrowLeft, Filter, CheckCircle, User, Star, Activity, ChevronRight, AlertTriangle, Settings, Bell, Lock, Globe, Save, Mail, Phone, Shield, LogOut, ChevronLeft, GraduationCap, Languages, Menu, FileText, Home } from 'lucide-react';
-import { MOCK_APPOINTMENTS, MOCK_VITALS } from '../constants';
+import { MOCK_VITALS } from '../constants';
 import { Doctor, Appointment, AppointmentStatus, User as UserType } from '../types';
 import { Button, Card, Badge, Modal } from '../components/UIComponents';
 import { analyzeSymptoms, AISymptomResponse } from '../services/geminiService';
@@ -318,6 +318,9 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
         
         console.log('✅ Booking successful, response:', response);
         
+        // Show success alert
+        alert('Booking Successful! Your appointment has been confirmed.');
+        
         // Refresh appointments list
         if (currentUser) {
           console.log('🔄 Refreshing appointments list...');
@@ -327,8 +330,12 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
           console.log('✅ Appointments refreshed, total:', appointmentsData.length);
         }
         
-        console.log('✅ Moving to success step (step 3)');
-        setBookingStep(3);
+        // Close modal and navigate to My Appointments
+        setIsBookingModalOpen(false);
+        setViewMode('MY_APPOINTMENTS');
+        onNavigate('patient_appointments');
+        
+        console.log('✅ Redirected to My Appointments');
       } catch (err: any) {
         console.error('❌ Error creating appointment:', err);
         console.error('❌ Error name:', err.name);
