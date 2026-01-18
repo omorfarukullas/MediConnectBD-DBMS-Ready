@@ -2,7 +2,16 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const { protect } = require('../middleware/authMiddleware');
-const { uploadDocument, getDocuments, getPatientDocuments, deleteDocument } = require('../controllers/documentController');
+const { validateAppointmentAccess, validateDocumentAccess } = require('../middleware/appointmentAccessMiddleware');
+const { 
+    uploadDocument, 
+    getDocuments, 
+    getPatientDocuments, 
+    deleteDocument,
+    updateDocumentPrivacy,
+    updateDocumentVisibility,
+    downloadDocument 
+} = require('../controllers/documentController');
 
 const router = express.Router();
 
@@ -80,9 +89,30 @@ router.get('/', protect, getDocuments);
 /**
  * @route   GET /api/documents/patient/:userId
  * @desc    Get documents for a specific patient (Doctor/Admin only)
- * @access  Private (Doctor/Admin)
+ * @access  Private (Doctor/Admin) - Privacy filtered
  */
 router.get('/patient/:userId', protect, getPatientDocuments);
+
+/**
+ * @route   PATCH /api/documents/:id/privacy
+ * @desc    Update document privacy setting
+ * @access  Private (Patient only)
+ */
+router.patch('/:id/privacy', protect, updateDocumentPrivacy);
+
+/**
+ * @route   PATCH /api/documents/:id/visibility
+ * @desc    Update document visibility/audience (private/public)
+ * @access  Private (Patient only)
+ */
+router.patch('/:id/visibility', protect, updateDocumentVisibility);
+
+/**
+ * @route   GET /api/documents/:id/download
+ * @desc    Download a document
+ * @access  Private - Privacy filtered for doctors
+ */
+router.get('/:id/download', protect, downloadDocument);
 
 /**
  * @route   DELETE /api/documents/:id

@@ -3,7 +3,7 @@
  * Handles real-time notification delivery via Socket.IO
  */
 
-const { Notification } = require('../models');
+const pool = require('../config/db');
 
 class NotificationService {
     constructor(io, connectedUsers) {
@@ -20,10 +20,28 @@ class NotificationService {
     async createAndEmit(userId, notificationData) {
         try {
             // Create notification in database
-            const notification = await Notification.create({
+            const [result] = await pool.execute(
+                'INSERT INTO notifications (user_id, title, message, type, priority, related_id, related_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [
+                    userId,
+                    notificationData.title,
+                    notificationData.message,
+                    notificationData.type || 'GENERAL',
+                    notificationData.priority || 'MEDIUM',
+                    notificationData.relatedId || null,
+                    notificationData.relatedType || null
+                ]
+            );
+
+            const notification = {
+                id: result.insertId,
                 userId,
-                ...notificationData
-            });
+                title: notificationData.title,
+                message: notificationData.message,
+                type: notificationData.type || 'GENERAL',
+                isRead: false,
+                createdAt: new Date()
+            };
 
             // Emit to user's room in real-time
             this.io.to(`user_${userId}`).emit('new_notification', {

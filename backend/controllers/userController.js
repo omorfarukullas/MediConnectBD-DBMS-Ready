@@ -1,6 +1,10 @@
+// ============================================================
+// User/Patient Controller - Raw SQL Implementation
+// Using mysql2/promise with parameterized queries
+// ============================================================
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const sequelize = require('../config/db');
+const pool = require('../config/db');
 
 /**
  * Generate JWT token with user ID and role
@@ -11,7 +15,7 @@ const sequelize = require('../config/db');
 const generateToken = (id, role) => {
     return jwt.sign(
         { id, role }, 
-        process.env.JWT_SECRET || 'secret123', 
+        process.env.JWT_SECRET || 'aVeryStrongAndSecretKey', 
         { expiresIn: '30d' }
     );
 };
@@ -31,9 +35,9 @@ const registerUser = async (req, res) => {
         }
 
         // Check if patient already exists in patients table
-        const [existingPatients] = await sequelize.query(
-            'SELECT * FROM patients WHERE email = ?',
-            { replacements: [email] }
+        const [existingPatients] = await pool.execute(
+            'SELECT id FROM patients WHERE email = ?',
+            [email]
         );
 
         if (existingPatients.length > 0) {
@@ -45,20 +49,21 @@ const registerUser = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Insert into patients table
-        const [result] = await sequelize.query(
+        const [result] = await pool.execute(
             'INSERT INTO patients (full_name, email, password, phone, address) VALUES (?, ?, ?, ?, ?)',
-            { replacements: [name, email, hashedPassword, phone || null, address || null] }
+            [name, email, hashedPassword, phone || null, address || null]
         );
 
-        console.log('✅ Patient registered successfully:', { id: result, email: email });
+        const patientId = result.insertId;
+        console.log('✅ Patient registered successfully:', { id: patientId, email: email });
         
         res.status(201).json({
-            id: result,
+            id: patientId,
             name: name,
             email: email,
             phone: phone,
             role: 'PATIENT',
-            token: generateToken(result, 'PATIENT')
+            token: generateToken(patientId, 'PATIENT')
         });
 
     } catch (error) {
@@ -82,9 +87,9 @@ const authUser = async (req, res) => {
         }
 
         // Find patient by email in patients table
-        const [patients] = await sequelize.query(
-            'SELECT * FROM patients WHERE email = ?',
-            { replacements: [email] }
+        const [patients] = await pool.execute(
+            'SELECT id, full_name, email, password, phone, address FROM patients WHERE email = ?',
+            [email]
         );
 
         if (patients.length === 0) {
@@ -131,9 +136,9 @@ const authUser = async (req, res) => {
 const getUserProfile = async (req, res) => {
     try {
         // req.user is set by the protect middleware
-        const [patients] = await sequelize.query(
-            'SELECT id, full_name, email, phone, address, blood_group, profile_image, created_at FROM patients WHERE id = ?',
-            { replacements: [req.user.id] }
+        const [patients] = await pool.execute(
+            'SELECT id, full_name, email, phone, address, blood_group, created_at FROM patients WHERE id = ?',
+            [req.user.id]
         );
 
         if (patients.length > 0) {
@@ -144,8 +149,7 @@ const getUserProfile = async (req, res) => {
                 email: patient.email,
                 phone: patient.phone,
                 address: patient.address,
-                blood_group: patient.blood_group,
-                profile_image: patient.profile_image,
+                bloodGroup: patient.blood_group,
                 role: 'PATIENT'
             });
         } else {
@@ -196,15 +200,15 @@ const updateUserProfile = async (req, res) => {
         
         values.push(req.user.id);
         
-        await sequelize.query(
+        await pool.execute(
             `UPDATE patients SET ${updates.join(', ')} WHERE id = ?`,
-            { replacements: values }
+            values
         );
 
         // Fetch updated patient
-        const [patients] = await sequelize.query(
+        const [patients] = await pool.execute(
             'SELECT id, full_name, email, phone, address, blood_group FROM patients WHERE id = ?',
-            { replacements: [req.user.id] }
+            [req.user.id]
         );
 
         if (patients.length > 0) {
@@ -228,9 +232,79 @@ const updateUserProfile = async (req, res) => {
     }
 };
 
+// @desc    Get patient privacy settings
+// @route   GET /api/auth/privacy
+// @access  Private
+const getPrivacySettings = async (req, res) => {
+    try {
+        const [patients] = await pool.execute(
+            'SELECT share_medical_history, visible_in_search FROM patients WHERE id = ?',
+            [req.user.id]
+        );
+
+        if (patients.length > 0) {
+            res.json({
+                shareHistory: patients[0].share_medical_history === 1,
+                visibleToSearch: patients[0].visible_in_search === 1
+            });
+        } else {
+            res.status(404).json({ message: 'Patient not found' });
+        }
+    } catch (error) {
+        console.error('Get Privacy Settings Error:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// @desc    Update patient privacy settings
+// @route   PUT /api/auth/privacy
+// @access  Private
+const updatePrivacySettings = async (req, res) => {
+    try {
+        const { shareHistory, visibleToSearch } = req.body;
+        
+        console.log('🔒 Updating privacy settings for patient:', req.user.id);
+        console.log('User role:', req.user.role);
+        console.log('Settings:', { shareHistory, visibleToSearch });
+        
+        // Ensure user is a patient
+        if (req.user.role !== 'PATIENT') {
+            return res.status(403).json({ message: 'Only patients can update privacy settings' });
+        }
+        
+        const [result] = await pool.execute(
+            'UPDATE patients SET share_medical_history = ?, visible_in_search = ? WHERE id = ?',
+            [shareHistory ? 1 : 0, visibleToSearch ? 1 : 0, req.user.id]
+        );
+
+        console.log('✅ Privacy settings update result:', result);
+        console.log('Rows affected:', result.affectedRows);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Patient not found' });
+        }
+
+        res.json({
+            message: 'Privacy settings updated successfully',
+            shareHistory,
+            visibleToSearch
+        });
+    } catch (error) {
+        console.error('Update Privacy Settings Error:', error);
+        console.error('Error details:', error.message, error.sqlMessage);
+        res.status(500).json({ 
+            message: 'Server error updating privacy settings', 
+            error: error.message,
+            details: error.sqlMessage 
+        });
+    }
+};
+
 module.exports = { 
     registerUser, 
     authUser, 
     getUserProfile, 
-    updateUserProfile 
+    updateUserProfile,
+    getPrivacySettings,
+    updatePrivacySettings
 };

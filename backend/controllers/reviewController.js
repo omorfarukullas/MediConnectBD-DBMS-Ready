@@ -1,4 +1,4 @@
-const { Review, Doctor, User, Appointment } = require('../models');
+const pool = require('../config/db');
 
 /**
  * @desc    Create a new review for a doctor
@@ -15,41 +15,42 @@ const createReview = async (req, res) => {
         }
 
         // Check if doctor exists
-        const doctor = await Doctor.findByPk(doctorId);
-        if (!doctor) {
+        const [doctors] = await pool.execute('SELECT id FROM doctors WHERE id = ?', [doctorId]);
+        if (doctors.length === 0) {
             return res.status(404).json({ message: 'Doctor not found' });
         }
 
         // Check if user already reviewed this doctor
-        const existingReview = await Review.findOne({
-            where: {
-                patientId: req.user.id,
-                doctorId: doctorId
-            }
-        });
+        const [existingReviews] = await pool.execute(
+            'SELECT id FROM reviews WHERE patient_id = ? AND doctor_id = ?',
+            [req.user.id, doctorId]
+        );
 
-        if (existingReview) {
+        if (existingReviews.length > 0) {
             return res.status(400).json({ message: 'You have already reviewed this doctor. Use update instead.' });
         }
 
         // Create review
-        const review = await Review.create({
-            patientId: req.user.id,
-            doctorId,
-            rating,
-            comment,
-            appointmentId,
-            isVerified: appointmentId ? true : false
-        });
+        const [result] = await pool.execute(
+            'INSERT INTO reviews (patient_id, doctor_id, rating, comment, appointment_id, is_verified) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.id, doctorId, rating, comment || null, appointmentId || null, appointmentId ? 1 : 0]
+        );
 
         // Update doctor's average rating
-        const allReviews = await Review.findAll({ where: { doctorId } });
+        const [allReviews] = await pool.execute('SELECT rating FROM reviews WHERE doctor_id = ?', [doctorId]);
         const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
-        await doctor.update({ rating: avgRating.toFixed(1) });
+        await pool.execute('UPDATE doctors SET rating = ? WHERE id = ?', [avgRating.toFixed(1), doctorId]);
 
         res.status(201).json({
             message: 'Review created successfully',
-            review
+            review: {
+                id: result.insertId,
+                patientId: req.user.id,
+                doctorId,
+                rating,
+                comment,
+                appointmentId
+            }
         });
     } catch (error) {
         console.error('Create Review Error:', error);
@@ -66,21 +67,36 @@ const getDoctorReviews = async (req, res) => {
     try {
         const { doctorId } = req.params;
 
-        const reviews = await Review.findAll({
-            where: { doctorId },
-            include: [
-                {
-                    model: User,
-                    as: 'patient',
-                    attributes: ['id', 'name', 'image']
-                }
-            ],
-            order: [['createdAt', 'DESC']]
-        });
+        const [reviews] = await pool.execute(
+            `SELECT r.id, r.patient_id, r.doctor_id, r.rating, r.comment, r.appointment_id, r.is_verified, r.created_at, r.updated_at,
+                    p.full_name as patient_name, p.email as patient_email
+             FROM reviews r
+             LEFT JOIN patients p ON r.patient_id = p.id
+             WHERE r.doctor_id = ?
+             ORDER BY r.created_at DESC`,
+            [doctorId]
+        );
+
+        const formattedReviews = reviews.map(r => ({
+            id: r.id,
+            patientId: r.patient_id,
+            doctorId: r.doctor_id,
+            rating: r.rating,
+            comment: r.comment,
+            appointmentId: r.appointment_id,
+            isVerified: r.is_verified,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            patient: {
+                id: r.patient_id,
+                name: r.patient_name,
+                email: r.patient_email
+            }
+        }));
 
         res.json({
-            count: reviews.length,
-            reviews
+            count: formattedReviews.length,
+            reviews: formattedReviews
         });
     } catch (error) {
         console.error('Get Doctor Reviews Error:', error);
@@ -95,26 +111,36 @@ const getDoctorReviews = async (req, res) => {
  */
 const getMyReviews = async (req, res) => {
     try {
-        const reviews = await Review.findAll({
-            where: { patientId: req.user.id },
-            include: [
-                {
-                    model: Doctor,
-                    as: 'doctor',
-                    include: [
-                        {
-                            model: User,
-                            attributes: ['name', 'image']
-                        }
-                    ]
-                }
-            ],
-            order: [['createdAt', 'DESC']]
-        });
+        const [reviews] = await pool.execute(
+            `SELECT r.id, r.patient_id, r.doctor_id, r.rating, r.comment, r.appointment_id, r.is_verified, r.created_at, r.updated_at,
+                    d.full_name as doctor_name, d.specialization, d.email as doctor_email
+             FROM reviews r
+             LEFT JOIN doctors d ON r.doctor_id = d.id
+             WHERE r.patient_id = ?
+             ORDER BY r.created_at DESC`,
+            [req.user.id]
+        );
+
+        const formattedReviews = reviews.map(r => ({
+            id: r.id,
+            patientId: r.patient_id,
+            doctorId: r.doctor_id,
+            rating: r.rating,
+            comment: r.comment,
+            appointmentId: r.appointment_id,
+            isVerified: r.is_verified,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            doctor: {
+                name: r.doctor_name,
+                specialization: r.specialization,
+                email: r.doctor_email
+            }
+        }));
 
         res.json({
-            count: reviews.length,
-            reviews
+            count: formattedReviews.length,
+            reviews: formattedReviews
         });
     } catch (error) {
         console.error('Get My Reviews Error:', error);
@@ -129,31 +155,51 @@ const getMyReviews = async (req, res) => {
  */
 const updateReview = async (req, res) => {
     try {
-        const review = await Review.findByPk(req.params.id);
+        const [reviews] = await pool.execute(
+            'SELECT id, patient_id, doctor_id, rating, comment FROM reviews WHERE id = ?',
+            [req.params.id]
+        );
 
-        if (!review) {
+        if (reviews.length === 0) {
             return res.status(404).json({ message: 'Review not found' });
         }
 
+        const review = reviews[0];
+
         // Check if user owns this review
-        if (review.patientId !== req.user.id) {
+        if (review.patient_id !== req.user.id) {
             return res.status(403).json({ message: 'You can only update your own reviews' });
         }
 
         // Update review
-        review.rating = req.body.rating || review.rating;
-        review.comment = req.body.comment || review.comment;
+        const newRating = req.body.rating || review.rating;
+        const newComment = req.body.comment || review.comment;
 
-        const updatedReview = await review.save();
+        await pool.execute(
+            'UPDATE reviews SET rating = ?, comment = ?, updated_at = NOW() WHERE id = ?',
+            [newRating, newComment, req.params.id]
+        );
 
         // Recalculate doctor's average rating
-        const allReviews = await Review.findAll({ where: { doctorId: review.doctorId } });
+        const [allReviews] = await pool.execute(
+            'SELECT rating FROM reviews WHERE doctor_id = ?',
+            [review.doctor_id]
+        );
         const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
-        await Doctor.update({ rating: avgRating.toFixed(1) }, { where: { id: review.doctorId } });
+        await pool.execute(
+            'UPDATE doctors SET rating = ? WHERE id = ?',
+            [avgRating.toFixed(1), review.doctor_id]
+        );
 
         res.json({
             message: 'Review updated successfully',
-            review: updatedReview
+            review: {
+                id: req.params.id,
+                patientId: req.user.id,
+                doctorId: review.doctor_id,
+                rating: newRating,
+                comment: newComment
+            }
         });
     } catch (error) {
         console.error('Update Review Error:', error);
@@ -168,27 +214,44 @@ const updateReview = async (req, res) => {
  */
 const deleteReview = async (req, res) => {
     try {
-        const review = await Review.findByPk(req.params.id);
+        const [reviews] = await pool.execute(
+            'SELECT id, patient_id, doctor_id FROM reviews WHERE id = ?',
+            [req.params.id]
+        );
 
-        if (!review) {
+        if (reviews.length === 0) {
             return res.status(404).json({ message: 'Review not found' });
         }
 
-        // Check if user owns this review or is an admin
-        if (review.patientId !== req.user.id && req.user.role !== 'ADMIN') {
-            return res.status(403).json({ message: 'Access denied' });
+        const review = reviews[0];
+
+        // Check if user owns this review or is admin
+        if (review.patient_id !== req.user.id && req.user.role !== 'ADMIN') {
+            return res.status(403).json({ message: 'You can only delete your own reviews' });
         }
 
-        const doctorId = review.doctorId;
-        await review.destroy();
+        const doctorId = review.doctor_id;
+
+        // Delete review
+        await pool.execute('DELETE FROM reviews WHERE id = ?', [req.params.id]);
 
         // Recalculate doctor's average rating
-        const remainingReviews = await Review.findAll({ where: { doctorId } });
+        const [remainingReviews] = await pool.execute(
+            'SELECT rating FROM reviews WHERE doctor_id = ?',
+            [doctorId]
+        );
+        
         if (remainingReviews.length > 0) {
             const avgRating = remainingReviews.reduce((sum, r) => sum + r.rating, 0) / remainingReviews.length;
-            await Doctor.update({ rating: avgRating.toFixed(1) }, { where: { id: doctorId } });
+            await pool.execute(
+                'UPDATE doctors SET rating = ? WHERE id = ?',
+                [avgRating.toFixed(1), doctorId]
+            );
         } else {
-            await Doctor.update({ rating: 0 }, { where: { id: doctorId } });
+            await pool.execute(
+                'UPDATE doctors SET rating = 0 WHERE id = ?',
+                [doctorId]
+            );
         }
 
         res.json({ message: 'Review deleted successfully' });

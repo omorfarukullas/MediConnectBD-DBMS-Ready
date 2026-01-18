@@ -4,10 +4,14 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const { sequelize } = require('./models');
+
+console.log('📦 Loading database pool...');
+const pool = require('./config/db'); // Raw SQL connection pool
+console.log('📦 Loading NotificationService...');
 const NotificationService = require('./services/notificationService');
 
 // Routes
+console.log('📦 Loading routes...');
 const userRoutes = require('./routes/userRoutes');
 const doctorRoutes = require('./routes/doctorRoutes');
 const appointmentRoutes = require('./routes/appointmentRoutes');
@@ -15,15 +19,30 @@ const emergencyRoutes = require('./routes/emergencyRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const documentRoutes = require('./routes/documentRoutes');
+const prescriptionRoutes = require('./routes/prescriptionRoutes');
+const queueRoutes = require('./routes/queueRoutes');
+const slotRoutes = require('./routes/slotRoutes');
+console.log('✅ All routes loaded');
 
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 
+// Socket.io setup
+const io = new Server(server, {
+    cors: { 
+        origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003"],
+        credentials: true
+    }
+});
+
+// Make io available to routes
+app.set('io', io);
+
 // Middleware - CORS Configuration for Direct Frontend Connection
 app.use(cors({
-    origin: 'http://localhost:3000',
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -50,14 +69,14 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/notifications', notificationRoutes);
 // Document management routes (file uploads)
 app.use('/api/documents', documentRoutes);
-
-// Socket.io with authentication
-const io = new Server(server, {
-    cors: { 
-        origin: "http://localhost:3000",
-        credentials: true
-    }
-});
+// Prescription routes (time-gated for doctors)
+app.use('/api/prescriptions', prescriptionRoutes);
+// Queue management routes
+app.use('/api/queue', queueRoutes);
+// Vitals management routes
+app.use('/api/vitals', require('./routes/vitalsRoutes'));
+// Slot management routes for appointments
+app.use('/api/slots', slotRoutes);
 
 // Socket.IO authentication middleware
 io.use((socket, next) => {
@@ -68,7 +87,7 @@ io.use((socket, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'aVeryStrongAndSecretKey');
         socket.userId = decoded.id;
         socket.userRole = decoded.role;
         next();
@@ -88,10 +107,14 @@ io.on('connection', (socket) => {
 
     // Join user's personal notification room
     socket.join(`user_${socket.userId}`);
+    
+    // Join patient room for queue updates
+    socket.join(`patient_${socket.userId}`);
 
     // Join queue room if doctor
     if (socket.userRole === 'DOCTOR') {
         socket.join(`doctor_${socket.userId}`);
+        socket.join(`doctor_${socket.userId}_queue`);
     }
 
     // Handle queue joining for patients
@@ -131,11 +154,27 @@ console.log('✅ Socket.IO and Notification Service initialized');
 // Sync Database and Start Server
 const PORT = process.env.PORT || 5000;
 
-// Test database connection without syncing
-sequelize.authenticate()
-    .then(() => {
-        console.log('✅ MySQL Database Connected on port 3307');
-        server.listen(PORT, () => {
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+    console.error('❌ Unhandled Promise Rejection:', err);
+    console.error('Stack trace:', err.stack);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('❌ Uncaught Exception:', err);
+    console.error('Stack trace:', err.stack);
+});
+
+// Test database connection and start server
+const startServer = async () => {
+    try {
+        // Test database connection
+        const connection = await pool.getConnection();
+        console.log(`✅ MySQL Database Connected on port ${process.env.DB_PORT || 3306}`);
+        connection.release();
+
+        // Start HTTP server
+        server.listen(PORT, '0.0.0.0', () => {
             console.log(`\n${'='.repeat(60)}`);
             console.log(`🚀 MediConnect Backend Server (Direct Connection)`);
             console.log(`${'='.repeat(60)}`);
@@ -145,9 +184,20 @@ sequelize.authenticate()
             console.log(`📂 File Uploads: http://localhost:${PORT}/uploads`);
             console.log(`🔌 WebSocket: Enabled`);
             console.log(`${'='.repeat(60)}\n`);
+        }).on('error', (err) => {
+            console.error('❌ Server error:', err);
+            if (err.code === 'EADDRINUSE') {
+                console.error(`Port ${PORT} is already in use. Please close the other application or use a different port.`);
+            }
+            process.exit(1);
         });
-    })
-    .catch(err => {
-        console.error('❌ Failed to connect to database:', err);
+    } catch (error) {
+        console.error('❌ Failed to connect to database:', error.message);
         process.exit(1);
-    });
+    }
+};
+
+startServer().catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+});

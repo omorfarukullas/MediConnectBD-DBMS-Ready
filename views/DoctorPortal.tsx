@@ -3,12 +3,15 @@ import React, { useState, useEffect } from 'react';
 import { 
     Users, Clock, Calendar, Video, CheckCircle, XCircle, ArrowLeft, 
     Home, List, Activity, FileText, CreditCard, Star, Bell, Settings, 
-    Play, Pause, Square, TrendingUp, LogOut, Menu
+    Play, Pause, Square, TrendingUp, LogOut, Menu, CalendarClock
 } from 'lucide-react';
 import { Card, Button, Badge } from '../components/UIComponents';
 import { MOCK_APPOINTMENTS } from '../constants';
 import { User as UserType } from '../types';
 import { NotificationBell } from '../components/NotificationBell';
+import { DoctorAppointmentList } from '../components/DoctorAppointmentList';
+import LiveQueueView from '../components/LiveQueueView';
+import SlotManagement from '../components/SlotManagement';
 import { api } from '../services/apiClient';
 
 interface DoctorPortalProps {
@@ -20,7 +23,7 @@ interface DoctorPortalProps {
 export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavigate, onBack }) => {
   console.log('🏥 DoctorPortal: Rendering with user:', currentUser);
   
-  const [activeView, setActiveView] = useState<'DASHBOARD' | 'APPOINTMENTS' | 'QUEUE' | 'TELEMEDICINE' | 'RECORDS' | 'EARNINGS' | 'FEEDBACK'>('DASHBOARD');
+  const [activeView, setActiveView] = useState<'DASHBOARD' | 'APPOINTMENTS' | 'SLOTS' | 'QUEUE' | 'TELEMEDICINE' | 'RECORDS' | 'EARNINGS' | 'FEEDBACK'>('DASHBOARD');
   const [currentQueue, setCurrentQueue] = useState(12);
   const [queueStatus, setQueueStatus] = useState<'ACTIVE' | 'PAUSED' | 'STOPPED'>('ACTIVE');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -114,6 +117,7 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
             <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
                 <MenuItem view="DASHBOARD" icon={<Home size={18}/>} label="Dashboard" />
                 <MenuItem view="APPOINTMENTS" icon={<List size={18}/>} label="Appointments" />
+                <MenuItem view="SLOTS" icon={<CalendarClock size={18}/>} label="Manage Slots" />
                 <MenuItem view="QUEUE" icon={<Activity size={18}/>} label="Live Queue" />
                 <MenuItem view="TELEMEDICINE" icon={<Video size={18}/>} label="Telemedicine" />
                 <MenuItem view="RECORDS" icon={<FileText size={18}/>} label="Patient Records" />
@@ -295,68 +299,7 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
 
                 {/* VIEW: LIVE QUEUE */}
                 {activeView === 'QUEUE' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* Control Panel */}
-                            <Card className="md:col-span-2">
-                                <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
-                                    <div>
-                                        <h3 className="font-bold text-xl text-slate-900">Queue Controller</h3>
-                                        <p className="text-slate-500 text-sm">Manage patient flow for Physical Visits</p>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => setQueueStatus('ACTIVE')} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors ${queueStatus === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-                                            <Play size={18} fill="currentColor" /> Start
-                                        </button>
-                                        <button onClick={() => setQueueStatus('PAUSED')} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors ${queueStatus === 'PAUSED' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'}`}>
-                                            <Pause size={18} fill="currentColor" /> Pause
-                                        </button>
-                                        <button onClick={() => setQueueStatus('STOPPED')} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors ${queueStatus === 'STOPPED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
-                                            <Square size={18} fill="currentColor" /> End
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col items-center justify-center py-10 bg-slate-50 rounded-xl border border-slate-200 mb-6">
-                                    <span className="text-slate-500 uppercase tracking-widest font-bold text-sm mb-2">Current Token</span>
-                                    <span className="text-8xl font-bold text-primary-600 mb-4">{currentQueue}</span>
-                                    <div className="flex gap-4">
-                                        <Button variant="outline" onClick={() => setCurrentQueue(c => Math.max(1, c - 1))}>Previous</Button>
-                                        <Button className="px-8 shadow-lg shadow-primary-500/30" onClick={() => setCurrentQueue(c => c + 1)}>Call Next</Button>
-                                    </div>
-                                </div>
-
-                                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex items-center justify-between">
-                                    <div>
-                                        <h4 className="font-bold text-blue-900">Estimated Wait Time</h4>
-                                        <p className="text-blue-700 text-sm">Based on avg. 15 min/patient</p>
-                                    </div>
-                                    <div className="text-2xl font-bold text-blue-800">25 Mins</div>
-                                </div>
-                            </Card>
-
-                            {/* Waiting List */}
-                            <Card>
-                                <h3 className="font-bold text-lg mb-4">Waiting List</h3>
-                                <div className="space-y-2">
-                                    {[1,2,3,4,5].map(i => (
-                                        <div key={i} className={`flex justify-between items-center p-3 rounded-lg ${i === 1 ? 'bg-green-50 border border-green-200' : 'bg-white border border-slate-100'}`}>
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${i === 1 ? 'bg-green-200 text-green-800' : 'bg-slate-100 text-slate-500'}`}>
-                                                    {currentQueue + i}
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium text-slate-900 text-sm">Patient Name</p>
-                                                    <p className="text-xs text-slate-500">017...123</p>
-                                                </div>
-                                            </div>
-                                            {i === 1 && <Badge color="green">Next</Badge>}
-                                        </div>
-                                    ))}
-                                </div>
-                            </Card>
-                        </div>
-                    </div>
+                    <LiveQueueView />
                 )}
                 
                 {/* VIEW: EARNINGS */}
@@ -413,8 +356,35 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                     </div>
                 )}
 
+                {/* VIEW: APPOINTMENTS - Date-Grouped List */}
+                {activeView === 'APPOINTMENTS' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-bold text-slate-900">My Appointments</h2>
+                                <p className="text-gray-600 mt-1">Manage your scheduled appointments</p>
+                            </div>
+                        </div>
+                        <DoctorAppointmentList 
+                            appointments={appointments}
+                            onRefresh={async () => {
+                                const appointmentsResponse = await api.getAppointments();
+                                const appointmentsData = appointmentsResponse.data || appointmentsResponse;
+                                setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
+                            }}
+                        />
+                    </div>
+                )}
+
+                {/* VIEW: SLOT MANAGEMENT */}
+                {activeView === 'SLOTS' && (
+                    <div className="animate-fade-in">
+                        <SlotManagement />
+                    </div>
+                )}
+
                 {/* Placeholder for other views */}
-                {(activeView === 'APPOINTMENTS' || activeView === 'TELEMEDICINE' || activeView === 'RECORDS' || activeView === 'FEEDBACK') && (
+                {(activeView === 'TELEMEDICINE' || activeView === 'RECORDS' || activeView === 'FEEDBACK') && (
                     <div className="flex items-center justify-center h-64 text-slate-400">
                         <p>View content for {activeView} is under development.</p>
                     </div>

@@ -132,6 +132,21 @@ class SocketService {
     }
 
     /**
+     * Get the socket instance
+     */
+    getSocket(): Socket | null {
+        return this.socket;
+    }
+
+    /**
+     * Listen for events
+     */
+    on(event: string, callback: (...args: any[]) => void): void {
+        if (!this.socket) return;
+        this.socket.on(event, callback);
+    }
+
+    /**
      * Remove all listeners for a specific event
      */
     off(event: string): void {

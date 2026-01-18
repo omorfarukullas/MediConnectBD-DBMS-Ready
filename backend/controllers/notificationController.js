@@ -1,4 +1,4 @@
-const { Notification } = require('../models');
+const pool = require('../config/db');
 
 /**
  * @desc    Get all notifications for current user
@@ -9,28 +9,41 @@ const getNotifications = async (req, res) => {
     try {
         const { unreadOnly } = req.query;
 
-        const whereClause = { userId: req.user.id };
+        let query = 'SELECT * FROM notifications WHERE user_id = ?';
+        const params = [req.user.id];
+
         if (unreadOnly === 'true') {
-            whereClause.isRead = false;
+            query += ' AND is_read = 0';
         }
 
-        const notifications = await Notification.findAll({
-            where: whereClause,
-            order: [['createdAt', 'DESC']],
-            limit: 50 // Last 50 notifications
-        });
+        query += ' ORDER BY created_at DESC LIMIT 50';
 
-        const unreadCount = await Notification.count({
-            where: {
-                userId: req.user.id,
-                isRead: false
-            }
-        });
+        const [notifications] = await pool.execute(query, params);
+
+        // Get unread count
+        const [unreadResult] = await pool.execute(
+            'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0',
+            [req.user.id]
+        );
+
+        const formattedNotifications = notifications.map(n => ({
+            id: n.id,
+            userId: n.user_id,
+            title: n.title,
+            message: n.message,
+            type: n.type,
+            priority: n.priority,
+            isRead: n.is_read === 1,
+            relatedId: n.related_id,
+            relatedType: n.related_type,
+            createdAt: n.created_at,
+            updatedAt: n.updated_at
+        }));
 
         res.json({
-            count: notifications.length,
-            unreadCount,
-            notifications
+            count: formattedNotifications.length,
+            unreadCount: unreadResult[0].count,
+            notifications: formattedNotifications
         });
     } catch (error) {
         console.error('Get Notifications Error:', error);
@@ -45,23 +58,30 @@ const getNotifications = async (req, res) => {
  */
 const markAsRead = async (req, res) => {
     try {
-        const notification = await Notification.findOne({
-            where: {
-                id: req.params.id,
-                userId: req.user.id
-            }
-        });
+        const [notifications] = await pool.execute(
+            'SELECT * FROM notifications WHERE id = ? AND user_id = ?',
+            [req.params.id, req.user.id]
+        );
 
-        if (!notification) {
+        if (notifications.length === 0) {
             return res.status(404).json({ message: 'Notification not found' });
         }
 
-        notification.isRead = true;
-        await notification.save();
+        await pool.execute(
+            'UPDATE notifications SET is_read = 1, updated_at = NOW() WHERE id = ?',
+            [req.params.id]
+        );
 
+        const notification = notifications[0];
         res.json({
             message: 'Notification marked as read',
-            notification
+            notification: {
+                id: notification.id,
+                userId: notification.user_id,
+                title: notification.title,
+                message: notification.message,
+                isRead: true
+            }
         });
     } catch (error) {
         console.error('Mark as Read Error:', error);
@@ -76,14 +96,9 @@ const markAsRead = async (req, res) => {
  */
 const markAllAsRead = async (req, res) => {
     try {
-        await Notification.update(
-            { isRead: true },
-            {
-                where: {
-                    userId: req.user.id,
-                    isRead: false
-                }
-            }
+        await pool.execute(
+            'UPDATE notifications SET is_read = 1, updated_at = NOW() WHERE user_id = ? AND is_read = 0',
+            [req.user.id]
         );
 
         res.json({ message: 'All notifications marked as read' });
@@ -100,18 +115,16 @@ const markAllAsRead = async (req, res) => {
  */
 const deleteNotification = async (req, res) => {
     try {
-        const notification = await Notification.findOne({
-            where: {
-                id: req.params.id,
-                userId: req.user.id
-            }
-        });
+        const [notifications] = await pool.execute(
+            'SELECT id FROM notifications WHERE id = ? AND user_id = ?',
+            [req.params.id, req.user.id]
+        );
 
-        if (!notification) {
+        if (notifications.length === 0) {
             return res.status(404).json({ message: 'Notification not found' });
         }
 
-        await notification.destroy();
+        await pool.execute('DELETE FROM notifications WHERE id = ?', [req.params.id]);
 
         res.json({ message: 'Notification deleted successfully' });
     } catch (error) {
@@ -133,19 +146,23 @@ const createNotification = async (req, res) => {
             return res.status(400).json({ message: 'userId, title, and message are required' });
         }
 
-        const notification = await Notification.create({
-            userId,
-            title,
-            message,
-            type: type || 'GENERAL',
-            priority: priority || 'MEDIUM',
-            relatedId,
-            relatedType
-        });
+        const [result] = await pool.execute(
+            'INSERT INTO notifications (user_id, title, message, type, priority, related_id, related_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [userId, title, message, type || 'GENERAL', priority || 'MEDIUM', relatedId || null, relatedType || null]
+        );
 
         res.status(201).json({
             message: 'Notification created successfully',
-            notification
+            notification: {
+                id: result.insertId,
+                userId,
+                title,
+                message,
+                type: type || 'GENERAL',
+                priority: priority || 'MEDIUM',
+                relatedId,
+                relatedType
+            }
         });
     } catch (error) {
         console.error('Create Notification Error:', error);
@@ -158,15 +175,11 @@ const createNotification = async (req, res) => {
  */
 const createNotificationHelper = async (userId, title, message, type, relatedId, relatedType, priority = 'MEDIUM') => {
     try {
-        return await Notification.create({
-            userId,
-            title,
-            message,
-            type,
-            relatedId,
-            relatedType,
-            priority
-        });
+        const [result] = await pool.execute(
+            'INSERT INTO notifications (user_id, title, message, type, priority, related_id, related_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [userId, title, message, type, priority, relatedId || null, relatedType || null]
+        );
+        return { id: result.insertId, userId, title, message, type, priority, relatedId, relatedType };
     } catch (error) {
         console.error('Helper Create Notification Error:', error);
         return null;

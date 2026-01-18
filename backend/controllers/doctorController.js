@@ -1,10 +1,14 @@
+// ============================================================
+// Doctor Controller - Raw SQL Implementation
+// Using mysql2/promise with parameterized queries
+// ============================================================
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const sequelize = require('../config/db');
+const pool = require('../config/db');
 
 // Generate JWT Token
 const generateToken = (id, role) => {
-    return jwt.sign({ id, role }, process.env.JWT_SECRET || 'mediconnect_secret_key_2024', {
+    return jwt.sign({ id, role }, process.env.JWT_SECRET || 'aVeryStrongAndSecretKey', {
         expiresIn: '30d'
     });
 };
@@ -53,9 +57,9 @@ const registerDoctor = async (req, res) => {
 
     try {
         // Check if email already exists in doctors table
-        const [existingDoctors] = await sequelize.query(
-            'SELECT * FROM doctors WHERE email = ?',
-            { replacements: [email] }
+        const [existingDoctors] = await pool.execute(
+            'SELECT id FROM doctors WHERE email = ?',
+            [email]
         );
 
         if (existingDoctors.length > 0) {
@@ -69,53 +73,49 @@ const registerDoctor = async (req, res) => {
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Parse degrees/education - handle both string and array
-        let educationArray = [];
+        // Parse degrees/education
+        let qualificationText = '';
         if (degrees) {
             if (Array.isArray(degrees)) {
-                educationArray = degrees;
+                qualificationText = degrees.join(', ');
             } else if (typeof degrees === 'string') {
-                educationArray = degrees.split(',').map(d => d.trim()).filter(d => d);
+                qualificationText = degrees;
             }
         }
 
-        // Insert into doctors table with all fields
-        const [result] = await sequelize.query(
+        // Insert into doctors table (matching actual schema columns)
+        const [result] = await pool.execute(
             `INSERT INTO doctors (
                 full_name, email, password, phone, city, specialization,
-                bmdcNumber, experienceYears, hospitalName, education,
-                feesOnline, feesPhysical, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            { 
-                replacements: [
-                    name,
-                    email,
-                    hashedPassword,
-                    phone || null,
-                    city || 'Dhaka',
-                    specialization,
-                    bmdcNumber || null,
-                    parseInt(experience) || 0,
-                    hospital || null,
-                    educationArray.length > 0 ? JSON.stringify(educationArray) : null,
-                    parseFloat(onlineFee) || 0,
-                    parseFloat(physicalFee) || 0,
-                    'Active'
-                ] 
-            }
+                qualification, experience_years, consultation_fee, bio
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                name,
+                email,
+                hashedPassword,
+                phone || null,
+                city || 'Dhaka',
+                specialization,
+                qualificationText || 'MBBS',
+                parseInt(experience) || 0,
+                parseFloat(onlineFee || physicalFee) || 500.00,
+                `Experienced ${specialization} at ${hospital || 'Hospital'}` || null
+            ]
         );
 
-        console.log('✅ Doctor registered successfully:', { id: result, email: email });
+        const doctorId = result.insertId;
+        console.log('✅ Doctor registered successfully:', { id: doctorId, email: email });
 
         res.status(201).json({
             success: true,
             message: 'Doctor registration successful',
             data: {
-                id: result,
+                id: doctorId,
                 name: name,
                 email: email,
                 specialization: specialization,
-                city: city
+                city: city,
+                token: generateToken(doctorId, 'DOCTOR')
             }
         });
 
@@ -157,9 +157,9 @@ const getDoctors = async (req, res) => {
         
         console.log('🔍 Query filters:', { specialty, city, search });
 
-        const [doctors] = await sequelize.query(
+        const [doctors] = await pool.execute(
             `SELECT * FROM doctors ${whereClause} ORDER BY id ASC`,
-            { replacements }
+            replacements
         );
 
         console.log(`✅ Found ${doctors.length} doctors in database`);
@@ -172,17 +172,17 @@ const getDoctors = async (req, res) => {
             phone: doc.phone || '',
             image: `https://ui-avatars.com/api/?name=${encodeURIComponent(doc.full_name || 'Doctor')}&background=0D8ABC&color=fff`,
             specialization: doc.specialization || 'General Medicine',
-            hospital: doc.hospitalName || doc.hospital || 'Not specified',
+            hospital: 'Not specified',
             location: doc.city || 'Dhaka',
             fees: { 
-                online: parseFloat(doc.feesOnline || doc.visit_fee || 0), 
-                physical: parseFloat(doc.feesPhysical || doc.visit_fee || 0)
+                online: parseFloat(doc.consultation_fee || 0), 
+                physical: parseFloat(doc.consultation_fee || 0)
             },
-            degrees: Array.isArray(doc.education) ? doc.education : ['MBBS'],
+            degrees: doc.qualification ? doc.qualification.split(',').map(d => d.trim()) : ['MBBS'],
             languages: ['Bangla', 'English'],
-            rating: parseFloat(doc.rating || 4.5),
-            isVerified: doc.isVerified ? true : false,
-            available: doc.available ? true : false
+            rating: 4.5,
+            isVerified: false,
+            available: false
         }));
 
         console.log('📤 Sending formatted doctors:', formattedDoctors.slice(0, 2));
@@ -195,9 +195,9 @@ const getDoctors = async (req, res) => {
 
 const getDoctorById = async (req, res) => {
     try {
-        const [doctors] = await sequelize.query(
+        const [doctors] = await pool.execute(
             'SELECT * FROM doctors WHERE id = ?',
-            { replacements: [req.params.id] }
+            [req.params.id]
         );
         
         if (doctors.length > 0) {
@@ -209,8 +209,10 @@ const getDoctorById = async (req, res) => {
                 phone: doc.phone,
                 specialization: doc.specialization,
                 city: doc.city,
-                hospital: doc.hospital,
-                visit_fee: doc.visit_fee,
+                qualification: doc.qualification,
+                experience_years: doc.experience_years,
+                consultation_fee: doc.consultation_fee,
+                bio: doc.bio,
                 created_at: doc.created_at
             });
         } else {
@@ -236,9 +238,9 @@ const authDoctor = async (req, res) => {
         }
 
         // Find doctor by email in doctors table
-        const [doctors] = await sequelize.query(
-            'SELECT * FROM doctors WHERE email = ?',
-            { replacements: [email] }
+        const [doctors] = await pool.execute(
+            'SELECT id, full_name, email, password, phone, specialization, city FROM doctors WHERE email = ?',
+            [email]
         );
 
         if (doctors.length === 0) {

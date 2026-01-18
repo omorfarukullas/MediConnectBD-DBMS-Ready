@@ -108,16 +108,23 @@ class HttpClient {
       headers,
     };
 
+    const fullUrl = `${this.baseURL}${endpoint}`;
+    console.log(`📡 ${options.method || 'GET'} ${fullUrl}`, options.body ? JSON.parse(options.body as string) : '');
+
     try {
-      const response = await fetch(`${this.baseURL}${endpoint}`, config);
+      const response = await fetch(fullUrl, config);
       const data = await response.json();
 
+      console.log(`📥 Response from ${endpoint}:`, { status: response.status, data });
+
       if (!response.ok) {
+        console.error(`❌ Request failed:`, data);
         throw new Error(data.message || 'Request failed');
       }
 
       return data as T;
     } catch (error) {
+      console.error(`❌ Network error for ${endpoint}:`, error);
       if (error instanceof Error) {
         throw error;
       }
@@ -309,11 +316,17 @@ class ApiService {
 
   // ==================== Documents ====================
 
-  async uploadDocument(file: File, documentType?: string, description?: string) {
-    const formData = new FormData();
-    formData.append('document', file);
-    if (documentType) formData.append('documentType', documentType);
-    if (description) formData.append('description', description);
+  async uploadDocument(file: File | FormData, documentType?: string, description?: string) {
+    let formData: FormData;
+    
+    if (file instanceof FormData) {
+      formData = file;
+    } else {
+      formData = new FormData();
+      formData.append('document', file);
+      if (documentType) formData.append('documentType', documentType);
+      if (description) formData.append('description', description);
+    }
 
     return this.http.post('/documents/upload', formData, {
       headers: {
@@ -334,10 +347,79 @@ class ApiService {
     return this.http.delete(`/documents/${id}`);
   }
 
+  async updateDocumentPrivacy(documentId: number, isPrivate: boolean) {
+    return this.http.patch(`/documents/${documentId}/privacy`, { isPrivate });
+  }
+
+  async downloadDocument(documentId: number): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/documents/${documentId}/download`, {
+      headers: {
+        'Authorization': `Bearer ${TokenManager.getToken()}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to download document');
+    }
+    
+    return response.blob();
+  }
+
+  // ==================== Prescriptions ====================
+
+  async createPrescription(data: {
+    patientId: number;
+    appointmentId: string | number;
+    diagnosis: string;
+    medicines: Array<{
+      name: string;
+      dosage: string;
+      duration: string;
+      instruction: string;
+    }>;
+  }) {
+    return this.http.post('/prescriptions', data);
+  }
+
+  async getPrescriptions() {
+    return this.http.get('/prescriptions');
+  }
+
+  async getPatientPrescriptions(patientId: number) {
+    return this.http.get(`/prescriptions/patient/${patientId}`);
+  }
+
   // ==================== Health Check ====================
 
   async healthCheck() {
     return this.http.get('/health');
+  }
+
+  // ==================== Generic Methods ====================
+  
+  async get<T = any>(endpoint: string): Promise<{ data: T }> {
+    const result = await this.http.get<T>(endpoint);
+    return { data: result };
+  }
+
+  async post<T = any>(endpoint: string, data?: any): Promise<{ data: T }> {
+    const result = await this.http.post<T>(endpoint, data);
+    return { data: result };
+  }
+
+  async put<T = any>(endpoint: string, data: any): Promise<{ data: T }> {
+    const result = await this.http.put<T>(endpoint, data);
+    return { data: result };
+  }
+
+  async patch<T = any>(endpoint: string, data: any): Promise<{ data: T }> {
+    const result = await this.http.put<T>(endpoint, data);
+    return { data: result };
+  }
+
+  async delete<T = any>(endpoint: string): Promise<{ data: T }> {
+    const result = await this.http.delete<T>(endpoint);
+    return { data: result };
   }
 }
 

@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const sequelize = require('../config/db');
+const pool = require('../config/db');
 
 /**
  * Middleware to protect routes - verifies JWT token
@@ -14,7 +14,7 @@ const protect = async (req, res, next) => {
             token = req.headers.authorization.split(' ')[1];
             
             // Verify token
-            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret123');
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'aVeryStrongAndSecretKey');
             
             console.log('🔐 Token decoded:', { id: decoded.id, role: decoded.role });
             
@@ -22,15 +22,15 @@ const protect = async (req, res, next) => {
             let userData = null;
             
             if (decoded.role === 'PATIENT') {
-                const [patients] = await sequelize.query(
+                const [patients] = await pool.execute(
                     'SELECT id, full_name as name, email, phone, address, blood_group FROM patients WHERE id = ?',
-                    { replacements: [decoded.id] }
+                    [decoded.id]
                 );
                 userData = patients[0];
             } else if (decoded.role === 'DOCTOR') {
-                const [doctors] = await sequelize.query(
+                const [doctors] = await pool.execute(
                     'SELECT id, full_name as name, email, phone, city, specialization FROM doctors WHERE id = ?',
-                    { replacements: [decoded.id] }
+                    [decoded.id]
                 );
                 userData = doctors[0];
             }
