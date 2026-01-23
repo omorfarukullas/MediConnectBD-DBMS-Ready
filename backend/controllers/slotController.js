@@ -1,45 +1,31 @@
 const pool = require('../config/db');
 
-// @desc    Get all slots for a doctor
+// Helper to get day name from date
+const getDayName = (date) => {
+    return date.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+};
+
+// @desc    Get all slot definitions for a doctor (Weekly Schedule)
 // @route   GET /api/slots/doctor/:doctorId
 // @access  Public
 const getDoctorSlots = async (req, res) => {
     try {
         const { doctorId } = req.params;
-        const { appointmentType, date } = req.query;
 
-        let query = `
+        const [slots] = await pool.execute(`
             SELECT 
-                ds.id,
-                ds.slot_date,
-                ds.slot_start_time,
-                ds.slot_end_time,
-                ds.appointment_type,
-                ds.max_appointments,
-                ds.current_bookings,
-                (ds.max_appointments - ds.current_bookings) AS available_spots,
-                ds.is_active
-            FROM doctor_slots ds
-            WHERE ds.doctor_id = ? 
-            AND ds.is_active = TRUE
-            AND ds.slot_date >= CURDATE()
-        `;
-
-        const params = [doctorId];
-
-        if (appointmentType) {
-            query += ' AND ds.appointment_type = ?';
-            params.push(appointmentType);
-        }
-
-        if (date) {
-            query += ' AND ds.slot_date = ?';
-            params.push(date);
-        }
-
-        query += ' ORDER BY ds.slot_date, ds.slot_start_time';
-
-        const [slots] = await pool.execute(query, params);
+                id,
+                day_of_week,
+                TIME_FORMAT(start_time, '%H:%i') as start_time,
+                TIME_FORMAT(end_time, '%H:%i') as end_time,
+                consultation_type,
+                max_patients,
+                slot_duration_minutes,
+                is_active
+            FROM doctor_slots
+            WHERE doctor_id = ? AND is_active = TRUE
+            ORDER BY FIELD(day_of_week, 'SATURDAY', 'SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'), start_time
+        `, [doctorId]);
 
         res.json({
             success: true,
@@ -56,72 +42,133 @@ const getDoctorSlots = async (req, res) => {
     }
 };
 
-// @desc    Get available slots for booking
+// @desc    Get available slots for booking (Session Blocks / Queue Based)
 // @route   GET /api/slots/available/:doctorId
 // @access  Public
 const getAvailableSlots = async (req, res) => {
     try {
         const { doctorId } = req.params;
-        const { appointmentType, startDate, endDate } = req.query;
+        const { startDate, endDate } = req.query;
 
-        let query = `
+        console.log(`🔍 [SlotDebug] Request for Doctor: ${doctorId}, Type: ${req.query.appointmentType}, Range: ${startDate || 'Today'} to ${endDate || '+14d'}`);
+
+        // 1. Get Doctor Details & Weekly Schedule Rules
+        const [doctorData] = await pool.execute(`
             SELECT 
-                ds.id,
-                ds.slot_date,
-                ds.slot_start_time,
-                ds.slot_end_time,
-                ds.appointment_type,
-                ds.max_appointments,
-                ds.current_bookings,
-                (ds.max_appointments - ds.current_bookings) AS available_spots,
-                d.name AS doctor_name,
-                d.specialization,
-                d.consultation_fee
-            FROM doctor_slots ds
-            JOIN doctors d ON ds.doctor_id = d.id
-            WHERE ds.doctor_id = ? 
-            AND ds.is_active = TRUE
-            AND ds.slot_date >= CURDATE()
-            AND ds.current_bookings < ds.max_appointments
-        `;
+                d.full_name as doctor_name, 
+                d.specialization, 
+                d.consultation_fee,
+                ds.*
+            FROM doctors d
+            JOIN doctor_slots ds ON d.id = ds.doctor_id
+            WHERE d.id = ? AND ds.is_active = TRUE
+        `, [doctorId]);
 
-        const params = [doctorId];
-
-        if (appointmentType) {
-            query += ' AND ds.appointment_type = ?';
-            params.push(appointmentType);
+        if (doctorData.length === 0) {
+            return res.json({ success: true, count: 0, slots: [], slotsByDate: {} });
         }
 
-        if (startDate) {
-            query += ' AND ds.slot_date >= ?';
-            params.push(startDate);
-        }
+        const doctorInfo = {
+            name: doctorData[0].doctor_name,
+            specialization: doctorData[0].specialization,
+            fee: doctorData[0].consultation_fee
+        };
 
-        if (endDate) {
-            query += ' AND ds.slot_date <= ?';
-            params.push(endDate);
-        }
+        // 2. Determine Date Range (Default: Today to +14 days)
+        const start = startDate ? new Date(startDate) : new Date();
+        const end = endDate ? new Date(endDate) : new Date();
+        if (!endDate) end.setDate(start.getDate() + 14);
 
-        query += ' ORDER BY ds.slot_date, ds.slot_start_time';
+        // Filter by appointment type if provided
+        const content_type_filter = req.query.appointmentType ? req.query.appointmentType.toUpperCase() : null;
 
-        const [slots] = await pool.execute(query, params);
+        // 3. Get Booking Counts per Session (Grouped by Date + Time)
+        // We assume appointments for a session are stored with appointment_time = session.start_time
+        const [bookingCounts] = await pool.execute(`
+            SELECT 
+                appointment_date, 
+                appointment_time, 
+                COUNT(*) as book_count
+            FROM appointments
+            WHERE doctor_id = ? 
+            AND appointment_date BETWEEN ? AND ?
+            AND status != 'CANCELLED'
+            GROUP BY appointment_date, appointment_time
+        `, [doctorId, start.toISOString().split('T')[0], end.toISOString().split('T')[0]]);
 
-        // Group slots by date
-        const slotsByDate = slots.reduce((acc, slot) => {
-            const date = slot.slot_date.toISOString().split('T')[0];
-            if (!acc[date]) {
-                acc[date] = [];
+        // Create a fast lookup map: "YYYY-MM-DD_HH:mm" -> count
+        const bookingMap = {};
+        bookingCounts.forEach(b => {
+            const dateStr = b.appointment_date.toISOString().split('T')[0];
+            const timeStr = b.appointment_time.substring(0, 5);
+            bookingMap[`${dateStr}_${timeStr}`] = b.book_count;
+        });
+
+        // 4. Generate Available Sessions
+        const generatedSlots = [];
+        const slotsByDate = {};
+
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().split('T')[0];
+            const dayName = getDayName(d);
+
+            const dailySchedules = doctorData.filter(s => {
+                if (s.day_of_week !== dayName) return false;
+                if (content_type_filter) {
+                    return s.consultation_type === 'BOTH' || s.consultation_type === content_type_filter;
+                }
+                return true;
+            });
+
+            if (dailySchedules.length > 0) {
+                if (!slotsByDate[dateStr]) slotsByDate[dateStr] = [];
+
+                for (const sched of dailySchedules) {
+                    const startHM = sched.start_time.substring(0, 5);
+                    const endHM = sched.end_time.substring(0, 5);
+
+                    // Identify bookings for this specific session
+                    const currentBookings = bookingMap[`${dateStr}_${startHM}`] || 0;
+                    const maxPatients = sched.max_patients || 40; // Default if not set
+
+                    // Available if space exists
+                    // We return the slot even if full, so frontend can show "Fully Booked" if desired
+                    // But typically getAvailable means "available". Let's return only if < maxPatients unless full visibility is needed.
+                    // User requirement: "patient can book... queue 1... max 40".
+
+                    const slotObj = {
+                        // Synthetic ID: RuleID + Date + StartTime
+                        id: parseInt(`${sched.id}${dateStr.replace(/-/g, '')}${startHM.replace(':', '')}`),
+                        slot_date: dateStr,
+                        slot_start_time: startHM, // Represents Session Start
+                        slot_end_time: endHM,     // Represents Session End
+                        appointment_type: sched.consultation_type === 'BOTH' && req.query.appointmentType ? req.query.appointmentType.toLowerCase() : sched.consultation_type.toLowerCase(),
+                        max_appointments: maxPatients,
+                        current_bookings: currentBookings,
+                        available_spots: Math.max(0, maxPatients - currentBookings),
+                        doctor_name: doctorInfo.name,
+                        specialization: doctorInfo.specialization,
+                        consultation_fee: parseFloat(doctorInfo.fee)
+                    };
+
+                    // Only push if available
+                    if (slotObj.available_spots > 0) {
+                        generatedSlots.push(slotObj);
+                        slotsByDate[dateStr].push(slotObj);
+                    }
+                }
             }
-            acc[date].push(slot);
-            return acc;
-        }, {});
+        }
+
+        console.log(`✅ [SlotDebug] Returning ${generatedSlots.length} sessions for Doctor ${doctorId}`);
 
         res.json({
             success: true,
-            count: slots.length,
-            slots,
+            count: generatedSlots.length,
+            slots: generatedSlots,
             slotsByDate
         });
+
     } catch (error) {
         console.error('❌ Error fetching available slots:', error);
         res.status(500).json({
@@ -132,310 +179,87 @@ const getAvailableSlots = async (req, res) => {
     }
 };
 
-// @desc    Create new slot(s) - Doctor only
+// @desc    Create new slot rule (Weekly) - Doctor only
 // @route   POST /api/slots
 // @access  Private (Doctor)
 const createSlots = async (req, res) => {
     try {
-        console.log('📥 Received slot creation request');
-        console.log('User:', req.user);
-        console.log('Body:', req.body);
-        
-        const doctorId = req.user.role === 'DOCTOR' ? req.user.id : req.body.doctorId;
-        const { 
-            slotDate, 
-            slotStartTime, 
-            slotEndTime, 
-            appointmentType, 
-            maxAppointments,
-            recurring,
-            endDate
+        const doctorId = req.user.role === 'DOCTOR' ? req.user.profile_id : req.body.doctorId;
+        const {
+            dayOfWeek,
+            startTime,
+            endTime,
+            consultationType,
+            maxPatients,
+            slotDuration
         } = req.body;
-
-        console.log('Doctor ID:', doctorId);
-        console.log('Slot Data:', { slotDate, slotStartTime, slotEndTime, appointmentType, maxAppointments });
-
-        // Ensure time format is HH:mm:ss
-        const formatTime = (time) => {
-            if (time && time.length === 5) return time + ':00';
-            return time;
-        };
-        const formattedStartTime = formatTime(slotStartTime);
-        const formattedEndTime = formatTime(slotEndTime);
-
-        console.log('Formatted times:', { formattedStartTime, formattedEndTime });
 
         // Validation
-        if (!slotDate || !slotStartTime || !slotEndTime || !appointmentType) {
-            console.log('❌ Validation failed: Missing required fields');
+        if (!dayOfWeek || !startTime || !endTime || !consultationType) {
             return res.status(400).json({
                 success: false,
-                message: 'Please provide all required fields'
+                message: 'Please provide all required fields (dayOfWeek, startTime, endTime, consultationType)'
             });
         }
 
-        if (new Date(slotDate) < new Date().setHours(0, 0, 0, 0)) {
-            console.log('❌ Validation failed: Past date');
-            return res.status(400).json({
-                success: false,
-                message: 'Cannot create slots for past dates'
-            });
-        }
+        const [result] = await pool.execute(
+            `INSERT INTO doctor_slots 
+             (doctor_id, day_of_week, start_time, end_time, consultation_type, max_patients, slot_duration_minutes) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [doctorId, dayOfWeek, startTime, endTime, consultationType, maxPatients || 40, slotDuration || 0]
+        );
 
-        const slots = [];
-
-        if (recurring && endDate) {
-            // Create recurring slots
-            const start = new Date(slotDate);
-            const end = new Date(endDate);
-            const dayOfWeek = start.getDay();
-
-            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-                if (d.getDay() === dayOfWeek) {
-                    const dateStr = d.toISOString().split('T')[0];
-                    
-                    // Check if slot already exists
-                    const [existing] = await pool.execute(
-                        `SELECT id FROM doctor_slots 
-                         WHERE doctor_id = ? AND slot_date = ? 
-                         AND slot_start_time = ? AND slot_end_time = ? 
-                         AND appointment_type = ?`,
-                        [doctorId, dateStr, formattedStartTime, formattedEndTime, appointmentType]
-                    );
-
-                    if (existing.length === 0) {
-                        const [result] = await pool.execute(
-                            `INSERT INTO doctor_slots 
-                             (doctor_id, slot_date, slot_start_time, slot_end_time, 
-                              appointment_type, max_appointments) 
-                             VALUES (?, ?, ?, ?, ?, ?)`,
-                            [doctorId, dateStr, formattedStartTime, formattedEndTime, 
-                             appointmentType, maxAppointments || 1]
-                        );
-                        slots.push({ id: result.insertId, date: dateStr });
-                    }
-                }
-            }
-        } else {
-            // Create single slot
-            console.log('🔨 Creating single slot...');
-            const [result] = await pool.execute(
-                `INSERT INTO doctor_slots 
-                 (doctor_id, slot_date, slot_start_time, slot_end_time, 
-                  appointment_type, max_appointments) 
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [doctorId, slotDate, formattedStartTime, formattedEndTime, 
-                 appointmentType, maxAppointments || 1]
-            );
-            console.log('✅ Slot created with ID:', result.insertId);
-            slots.push({ id: result.insertId, date: slotDate });
-        }
-
-        console.log(`✅ Successfully created ${slots.length} slot(s)`);
-        
         res.status(201).json({
             success: true,
-            message: `Successfully created ${slots.length} slot(s)`,
-            slots
+            message: 'Slot schedule created successfully',
+            slotId: result.insertId
         });
     } catch (error) {
-        console.error('❌ Error creating slots:', error);
+        console.error('❌ Error creating slot:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to create slots',
+            message: 'Failed to create slot',
             error: error.message
         });
     }
 };
 
-// @desc    Update slot
-// @route   PUT /api/slots/:id
-// @access  Private (Doctor)
-const updateSlot = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { 
-            slotDate, 
-            slotStartTime, 
-            slotEndTime, 
-            maxAppointments,
-            isActive 
-        } = req.body;
-
-        // Check if slot exists and belongs to doctor
-        const [slots] = await pool.execute(
-            'SELECT * FROM doctor_slots WHERE id = ?',
-            [id]
-        );
-
-        if (slots.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Slot not found'
-            });
-        }
-
-        const slot = slots[0];
-
-        // Verify ownership for doctors
-        if (req.user.role === 'DOCTOR' && slot.doctor_id !== req.user.id) {
-            return res.status(403).json({
-                success: false,
-                message: 'Not authorized to update this slot'
-            });
-        }
-
-        // Check if there are existing bookings
-        if (slot.current_bookings > 0 && maxAppointments && maxAppointments < slot.current_bookings) {
-            return res.status(400).json({
-                success: false,
-                message: `Cannot reduce max appointments below current bookings (${slot.current_bookings})`
-            });
-        }
-
-        const updates = [];
-        const params = [];
-
-        if (slotDate) {
-            updates.push('slot_date = ?');
-            params.push(slotDate);
-        }
-        if (slotStartTime) {
-            updates.push('slot_start_time = ?');
-            params.push(slotStartTime);
-        }
-        if (slotEndTime) {
-            updates.push('slot_end_time = ?');
-            params.push(slotEndTime);
-        }
-        if (maxAppointments !== undefined) {
-            updates.push('max_appointments = ?');
-            params.push(maxAppointments);
-        }
-        if (isActive !== undefined) {
-            updates.push('is_active = ?');
-            params.push(isActive ? 1 : 0);
-        }
-
-        if (updates.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No fields to update'
-            });
-        }
-
-        params.push(id);
-
-        await pool.execute(
-            `UPDATE doctor_slots SET ${updates.join(', ')} WHERE id = ?`,
-            params
-        );
-
-        res.json({
-            success: true,
-            message: 'Slot updated successfully'
-        });
-    } catch (error) {
-        console.error('❌ Error updating slot:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update slot',
-            error: error.message
-        });
-    }
-};
-
-// @desc    Delete slot
+// @desc    Delete slot rule
 // @route   DELETE /api/slots/:id
 // @access  Private (Doctor)
 const deleteSlot = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Check if slot exists
-        const [slots] = await pool.execute(
-            'SELECT * FROM doctor_slots WHERE id = ?',
-            [id]
-        );
+        // Check ownership
+        const [slots] = await pool.execute('SELECT doctor_id FROM doctor_slots WHERE id = ?', [id]);
+        if (slots.length === 0) return res.status(404).json({ success: false, message: 'Slot not found' });
 
-        if (slots.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Slot not found'
-            });
-        }
-
-        const slot = slots[0];
-
-        // Verify ownership for doctors
-        if (req.user.role === 'DOCTOR' && slot.doctor_id !== req.user.id) {
-            return res.status(403).json({
-                success: false,
-                message: 'Not authorized to delete this slot'
-            });
-        }
-
-        // Check if there are bookings
-        if (slot.current_bookings > 0) {
-            return res.status(400).json({
-                success: false,
-                message: `Cannot delete slot with existing bookings (${slot.current_bookings}). Please deactivate instead.`
-            });
+        if (req.user.role === 'DOCTOR' && slots[0].doctor_id !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
         await pool.execute('DELETE FROM doctor_slots WHERE id = ?', [id]);
 
-        res.json({
-            success: true,
-            message: 'Slot deleted successfully'
-        });
+        res.json({ success: true, message: 'Slot deleted successfully' });
     } catch (error) {
         console.error('❌ Error deleting slot:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to delete slot',
-            error: error.message
-        });
+        res.status(500).json({ success: false, message: 'Failed to delete slot', error: error.message });
     }
 };
 
-// @desc    Get my slots (for logged in doctor)
+// @desc    Get my slots (for logged in doctor) - Returns Weekly Schedule
 // @route   GET /api/slots/my-slots
 // @access  Private (Doctor)
 const getMySlots = async (req, res) => {
     try {
-        const doctorId = req.user.id;
-        const { upcoming } = req.query;
+        const doctorId = req.user.profile_id;
 
-        let query = `
-            SELECT 
-                ds.id,
-                ds.slot_date,
-                ds.slot_start_time,
-                ds.slot_end_time,
-                ds.appointment_type,
-                ds.max_appointments,
-                ds.current_bookings,
-                (ds.max_appointments - ds.current_bookings) AS available_spots,
-                ds.is_active,
-                COUNT(a.id) AS total_appointments
-            FROM doctor_slots ds
-            LEFT JOIN appointments a ON ds.id = a.slot_id AND a.status != 'cancelled'
-            WHERE ds.doctor_id = ?
-        `;
-
-        const params = [doctorId];
-
-        if (upcoming === 'true') {
-            query += ' AND ds.slot_date >= CURDATE()';
-        }
-
-        query += `
-            GROUP BY ds.id
-            ORDER BY ds.slot_date, ds.slot_start_time
-        `;
-
-        const [slots] = await pool.execute(query, params);
+        const [slots] = await pool.execute(`
+            SELECT * FROM doctor_slots 
+            WHERE doctor_id = ? 
+            ORDER BY FIELD(day_of_week, 'SATURDAY', 'SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'), start_time
+        `, [doctorId]);
 
         res.json({
             success: true,
@@ -452,11 +276,70 @@ const getMySlots = async (req, res) => {
     }
 };
 
+// Placeholder for updateSlot - can be implemented if needed
+// @desc    Update slot rule
+// @route   PUT /api/slots/:id
+// @access  Private (Doctor)
+const updateSlot = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { isActive, startTime, endTime, maxPatients, consultationType } = req.body;
+
+        // Check ownership
+        const [slots] = await pool.execute('SELECT doctor_id FROM doctor_slots WHERE id = ?', [id]);
+        if (slots.length === 0) return res.status(404).json({ success: false, message: 'Slot not found' });
+
+        if (req.user.role === 'DOCTOR' && slots[0].doctor_id !== req.user.profile_id) {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        // Build update query dynamically
+        const updates = [];
+        const values = [];
+
+        if (isActive !== undefined) {
+            updates.push('is_active = ?');
+            values.push(isActive ? 1 : 0);
+        }
+        if (startTime) {
+            updates.push('start_time = ?');
+            values.push(startTime);
+        }
+        if (endTime) {
+            updates.push('end_time = ?');
+            values.push(endTime);
+        }
+        if (maxPatients) {
+            updates.push('max_patients = ?');
+            values.push(maxPatients);
+        }
+        if (consultationType) {
+            updates.push('consultation_type = ?');
+            values.push(consultationType);
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ success: false, message: 'No fields to update' });
+        }
+
+        values.push(id);
+        await pool.execute(
+            `UPDATE doctor_slots SET ${updates.join(', ')} WHERE id = ?`,
+            values
+        );
+
+        res.json({ success: true, message: 'Slot updated successfully' });
+    } catch (error) {
+        console.error('❌ Error updating slot:', error);
+        res.status(500).json({ success: false, message: 'Failed to update slot', error: error.message });
+    }
+};
+
 module.exports = {
     getDoctorSlots,
     getAvailableSlots,
     createSlots,
-    updateSlot,
+    updateSlot, // kept for route compatibility
     deleteSlot,
     getMySlots
 };

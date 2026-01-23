@@ -1,5 +1,5 @@
 // ============================================================
-// Appointment Controller - Pure Raw SQL Implementation
+// Appointment Controller - Pure Raw SQL Implementation(Queue Based)
 // Using mysql2/promise with parameterized queries
 // ============================================================
 const pool = require('../config/db');
@@ -9,54 +9,55 @@ const pool = require('../config/db');
 // @access  Private (Patient or Doctor)
 const getMyAppointments = async (req, res) => {
     console.log('📋 Fetching appointments for user:', req.user.id, 'Role:', req.user.role);
-    
+
     try {
         // Determine which field to filter by based on user role
         const whereField = req.user.role === 'DOCTOR' ? 'doctor_id' : 'patient_id';
-        
+
         // Raw SQL query with JOIN - using ? placeholder for security
         const query = `
             SELECT 
                 a.id,
                 a.patient_id,
                 a.doctor_id,
-                a.slot_id,
-                a.appointment_type,
+                a.consultation_type as appointment_type,
                 a.appointment_date as date,
                 a.appointment_time as time,
                 a.reason_for_visit,
                 a.status,
-                a.queue_number,
-                a.queue_status,
-                a.checked_in_at,
+                aq.queue_number,
+                aq.status as queue_status,
                 a.started_at,
                 a.completed_at,
                 a.created_at,
                 a.updated_at,
                 p.full_name as patient_name,
-                p.email as patient_email,
+                pu.email as patient_email,
                 p.phone as patient_phone,
                 d.full_name as doctor_name,
-                d.email as doctor_email,
+                du.email as doctor_email,
                 d.specialization as doctor_specialization,
-                d.city as doctor_city,
+                h.city as doctor_city,
                 d.consultation_fee,
-                ds.slot_start_time,
-                ds.slot_end_time,
-                ds.max_appointments as slot_capacity,
-                ds.current_bookings as slot_bookings
+                ds.start_time as session_start_time,
+                ds.end_time as session_end_time,
+                ds.max_patients as session_capacity
             FROM appointments a
+            LEFT JOIN appointment_queue aq ON a.id = aq.appointment_id
             LEFT JOIN patients p ON a.patient_id = p.id
+            LEFT JOIN users pu ON p.user_id = pu.id
             LEFT JOIN doctors d ON a.doctor_id = d.id
-            LEFT JOIN doctor_slots ds ON a.slot_id = ds.id
+            LEFT JOIN users du ON d.user_id = du.id
+            LEFT JOIN hospitals h ON d.hospital_id = h.id
+            LEFT JOIN doctor_slots ds ON (d.id = ds.doctor_id AND DAYNAME(a.appointment_date) = ds.day_of_week)
             WHERE a.${whereField} = ?
             ORDER BY a.appointment_date DESC, a.appointment_time DESC
         `;
-        
+
         const [appointments] = await pool.execute(query, [req.user.id]);
-        
+
         console.log(`✅ Found ${appointments.length} appointments`);
-        
+
         // Format appointments for frontend (mapping snake_case to camelCase)
         const formattedAppointments = appointments.map(apt => ({
             id: apt.id,
@@ -67,9 +68,9 @@ const getMyAppointments = async (req, res) => {
             doctorImage: `https://ui-avatars.com/api/?name=${encodeURIComponent(apt.doctor_name || 'Doctor')}&background=0D8ABC&color=fff`,
             patientName: apt.patient_name || 'Unknown Patient',
             date: apt.date,
-            time: apt.time,
-            slotStartTime: apt.slot_start_time,
-            slotEndTime: apt.slot_end_time,
+            time: apt.time, // This is Session Start Time
+            slotStartTime: apt.session_start_time,
+            slotEndTime: apt.session_end_time,
             appointmentType: apt.appointment_type || 'physical',
             consultationType: apt.appointment_type === 'telemedicine' ? 'Telemedicine' : 'In-Person',
             consultationFee: apt.consultation_fee,
@@ -80,34 +81,33 @@ const getMyAppointments = async (req, res) => {
             checkedInAt: apt.checked_in_at,
             startedAt: apt.started_at,
             completedAt: apt.completed_at,
-            slotCapacity: apt.slot_capacity,
-            slotBookings: apt.slot_bookings,
+            slotCapacity: apt.session_capacity,
             createdAt: apt.created_at,
             updatedAt: apt.updated_at
         }));
-        
+
         res.json({
             success: true,
             data: formattedAppointments
         });
     } catch (error) {
         console.error('❌ Error fetching appointments:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: 'Failed to fetch appointments',
-            error: error.message 
+            error: error.message
         });
     }
 };
 
-// @desc    Book Appointment
+// @desc    Book Appointment (Queue Based)
 // @route   POST /api/appointments
 // @access  Private (Patient)
 const bookAppointment = async (req, res) => {
     console.log('📋 Book Appointment Request Body:', req.body);
     console.log('👤 Authenticated User:', req.user);
 
-    const { doctorId, slotId, appointmentDate, appointmentTime, appointmentType, symptoms } = req.body;
+    const { doctorId, slotId, symptoms } = req.body;
 
     // Validate required fields
     if (!req.user || !req.user.id) {
@@ -117,116 +117,155 @@ const bookAppointment = async (req, res) => {
 
     if (!doctorId || !slotId) {
         console.error('❌ Missing required fields:', { doctorId, slotId });
-        return res.status(400).json({ 
-            message: 'Missing required fields: doctorId and slotId are required' 
+        return res.status(400).json({
+            message: 'Missing required fields: doctorId and slotId are required'
         });
     }
 
     const connection = await pool.getConnection();
-    
+
     try {
         await connection.beginTransaction();
 
-        // Step 1: Get and lock the slot to prevent double booking
-        const [slots] = await connection.execute(
+        // Step 0: Get Patient ID from User ID
+        const [patientData] = await connection.execute(
+            'SELECT id FROM patients WHERE user_id = ?',
+            [req.user.id]
+        );
+
+        if (patientData.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Patient profile not found. Please complete your profile.' });
+        }
+
+        const patientId = patientData[0].id;
+
+        // Step 1: Parse Synthetic Slot ID
+        // Format: [RuleID][YYYYMMDD][HHMM]
+        const slotIdStr = String(slotId);
+
+        if (slotIdStr.length < 13) {
+            throw new Error('Invalid slot ID format');
+        }
+
+        const ruleId = slotIdStr.slice(0, -12);
+        const datePart = slotIdStr.slice(-12, -4); // YYYYMMDD
+        const timePart = slotIdStr.slice(-4);      // HHMM
+
+        // Format Date: YYYY-MM-DD
+        const appointmentDate = `${datePart.slice(0, 4)}-${datePart.slice(4, 6)}-${datePart.slice(6, 8)}`;
+
+        // Format Time: HH:mm
+        const appointmentTime = `${timePart.slice(0, 2)}:${timePart.slice(2, 4)}`;
+
+        console.log(`🔍 Parsed Session ID: Rule=${ruleId}, Date=${appointmentDate}, StartTime=${appointmentTime}`);
+
+        // Step 2: Verify Doctor Session Rule
+        const [rules] = await connection.execute(
             `SELECT ds.*, d.full_name as doctor_name, d.specialization, d.consultation_fee
              FROM doctor_slots ds
              JOIN doctors d ON ds.doctor_id = d.id
-             WHERE ds.id = ? AND ds.doctor_id = ?
-             FOR UPDATE`,
-            [slotId, doctorId]
+             WHERE ds.id = ? AND ds.doctor_id = ?`,
+            [ruleId, doctorId]
         );
-        
-        if (slots.length === 0) {
+
+        if (rules.length === 0) {
             await connection.rollback();
-            return res.status(404).json({ 
+            return res.status(404).json({
                 success: false,
-                message: 'Slot not found' 
+                message: 'Session definition not found'
             });
         }
 
-        const slot = slots[0];
+        const rule = rules[0];
 
-        // Step 2: Validate slot availability
-        if (!slot.is_active) {
+        if (!rule.is_active) {
             await connection.rollback();
-            return res.status(400).json({ 
+            return res.status(400).json({
                 success: false,
-                message: 'This slot is no longer active'
+                message: 'This session is no longer active'
             });
         }
 
-        if (slot.current_bookings >= slot.max_appointments) {
+        // Step 3: Check Current Capacity for this Session
+        // We count appointments for this doctor + date + time (session start)
+        const [counts] = await connection.execute(
+            `SELECT COUNT(*) as count FROM appointments 
+             WHERE doctor_id = ? 
+             AND appointment_date = ? 
+             AND appointment_time = ? 
+             AND status != 'CANCELLED'`,
+            [doctorId, appointmentDate, appointmentTime]
+        );
+
+        const currentBookings = counts[0].count;
+        const maxPatients = rule.max_patients || 40;
+
+        if (currentBookings >= maxPatients) {
             await connection.rollback();
-            return res.status(409).json({ 
+            return res.status(409).json({
                 success: false,
-                message: 'This slot is fully booked. Please select another time.'
+                message: 'This session is fully booked. Please try another day.'
             });
         }
 
-        const slotDate = new Date(slot.slot_date);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        if (slotDate < today) {
-            await connection.rollback();
-            return res.status(400).json({ 
-                success: false,
-                message: 'Cannot book appointments for past dates'
-            });
-        }
-
-        // Step 3: Check if patient already has an appointment in this slot
-        const [existingBooking] = await connection.execute(
+        // Step 4: Check if patient already has an appointment in this session
+        const [patientBooking] = await connection.execute(
             `SELECT id FROM appointments 
-             WHERE patient_id = ? AND slot_id = ? AND status != 'CANCELLED'`,
-            [req.user.id, slotId]
+             WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? AND status != 'CANCELLED'`,
+            [patientId, appointmentDate, appointmentTime]
         );
 
-        if (existingBooking.length > 0) {
+        if (patientBooking.length > 0) {
             await connection.rollback();
-            return res.status(409).json({ 
+            return res.status(409).json({
                 success: false,
-                message: 'You already have an appointment in this slot'
+                message: 'You already have an appointment in this session.'
             });
         }
-        
-        // Step 4: Create appointment
+
+        // Step 5: Create appointment
         const [result] = await connection.execute(
             `INSERT INTO appointments 
-             (patient_id, doctor_id, slot_id, appointment_type, appointment_date, 
-              appointment_time, reason_for_visit, status, queue_status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', 'waiting')`,
+             (patient_id, doctor_id, consultation_type, appointment_date, 
+              appointment_time, reason_for_visit, status, created_at, updated_at) 
+             VALUES (?, ?, ?, ?, ?, ?, 'PENDING', NOW(), NOW())`,
             [
-                req.user.id, 
-                doctorId, 
-                slotId, 
-                slot.appointment_type,
-                slot.slot_date,
-                slot.slot_start_time,
+                patientId,
+                doctorId,
+                rule.consultation_type === 'BOTH' ? ((req.body.appointmentType || 'physical').toUpperCase()) : rule.consultation_type,
+                appointmentDate,
+                appointmentTime,
                 symptoms || 'General consultation',
             ]
         );
 
         const appointmentId = result.insertId;
 
-        // Step 5: Assign queue number using stored procedure
-        await connection.execute(
-            `CALL assign_queue_number(?, ?, ?, ?, @queue_number)`,
-            [appointmentId, doctorId, req.user.id, slot.slot_date]
-        );
+        // Step 6: Assign queue number
+        try {
+            await connection.execute(
+                `CALL assign_queue_number(?, ?, ?, ?, @queue_number)`,
+                [appointmentId, doctorId, patientId, appointmentDate]
+            );
+        } catch (procError) {
+            console.warn('⚠️ Stored procedure assign_queue_number might strictly fail or logic fallback.');
+        }
 
-        const [[{ '@queue_number': queueNumber }]] = await connection.execute(
+        // Retrieve queue number
+        const [[{ '@queue_number': queueNumberStr }]] = await connection.execute(
             'SELECT @queue_number'
         );
 
+        const queueNumber = queueNumberStr || appointmentId;
+
         await connection.commit();
-        
-        console.log('✅ Appointment booked successfully:', { 
-            appointmentId, 
+
+        console.log('✅ Appointment booked successfully:', {
+            appointmentId,
             queueNumber,
-            slotId,
-            appointmentType: slot.appointment_type
+            date: appointmentDate,
+            time: appointmentTime
         });
 
         res.status(201).json({
@@ -234,16 +273,16 @@ const bookAppointment = async (req, res) => {
             message: 'Appointment booked successfully! 🎉',
             appointment: {
                 id: appointmentId,
-                patientId: req.user.id,
+                patientId: patientId,
                 doctorId: doctorId,
-                doctorName: slot.doctor_name,
-                specialization: slot.specialization,
+                doctorName: rule.doctor_name,
+                specialization: rule.specialization,
                 slotId: slotId,
-                date: slot.slot_date,
-                startTime: slot.slot_start_time,
-                endTime: slot.slot_end_time,
-                appointmentType: slot.appointment_type,
-                consultationFee: slot.consultation_fee,
+                date: appointmentDate,
+                startTime: appointmentTime,
+                endTime: rule.end_time, // Return session end time
+                appointmentType: rule.consultation_type,
+                consultationFee: rule.consultation_fee,
                 status: 'PENDING',
                 queueNumber: queueNumber,
                 queueStatus: 'waiting'
@@ -253,11 +292,11 @@ const bookAppointment = async (req, res) => {
         await connection.rollback();
         console.error('❌ Error creating appointment:', error);
         console.error('❌ Error stack:', error.stack);
-        
-        res.status(500).json({ 
+
+        res.status(500).json({
             success: false,
-            message: 'Failed to book appointment', 
-            error: error.message 
+            message: 'Failed to book appointment',
+            error: error.message
         });
     } finally {
         connection.release();
@@ -279,9 +318,9 @@ const updateAppointment = async (req, res) => {
         );
 
         if (appointments.length === 0) {
-            return res.status(404).json({ 
+            return res.status(404).json({
                 success: false,
-                message: 'Appointment not found' 
+                message: 'Appointment not found'
             });
         }
 
@@ -289,9 +328,9 @@ const updateAppointment = async (req, res) => {
 
         // Step 2: Authorization check
         if (appointment.patient_id !== req.user.id && req.user.role !== 'DOCTOR' && req.user.role !== 'ADMIN') {
-            return res.status(403).json({ 
+            return res.status(403).json({
                 success: false,
-                message: 'Not authorized to update this appointment' 
+                message: 'Not authorized to update this appointment'
             });
         }
 
@@ -313,9 +352,9 @@ const updateAppointment = async (req, res) => {
         }
 
         if (updates.length === 0) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 success: false,
-                message: 'No fields to update' 
+                message: 'No fields to update'
             });
         }
 
@@ -355,15 +394,15 @@ const updateAppointment = async (req, res) => {
         });
     } catch (error) {
         console.error('❌ Error updating appointment:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: 'Failed to update appointment',
-            error: error.message 
+            error: error.message
         });
     }
 };
 
-// @desc    Cancel Appointment (PATCH - updates status to REJECTED)
+// @desc    Cancel Appointment (PATCH - updates status to CANCELLED)
 // @route   PATCH /api/appointments/:id/cancel
 // @access  Private (Patient, Doctor, or Admin)
 const cancelAppointment = async (req, res) => {
@@ -371,69 +410,120 @@ const cancelAppointment = async (req, res) => {
 
     try {
         console.log('🚫 Cancel appointment request for ID:', id, 'by user:', req.user.id);
-        
-        // Step 1: Get appointment - Raw SQL
+
+        // Step 1: Get appointment with doctor details
         const [appointments] = await pool.execute(
             `SELECT 
-                id, patient_id, doctor_id, appointment_date, appointment_time, status 
-             FROM appointments WHERE id = ?`,
+                a.id, a.patient_id, a.doctor_id, a.appointment_date, 
+                a.appointment_time, a.status,
+                d.full_name as doctor_name,
+                p.full_name as patient_name
+             FROM appointments a
+             LEFT JOIN doctors d ON a.doctor_id = d.id
+             LEFT JOIN patients p ON a.patient_id = p.id
+             WHERE a.id = ?`,
             [id]
         );
 
         if (appointments.length === 0) {
             console.log('❌ Appointment not found');
-            return res.status(404).json({ 
+            return res.status(404).json({
                 success: false,
-                message: 'Appointment not found' 
+                message: 'Appointment not found'
             });
         }
 
         const appointment = appointments[0];
-        console.log('📋 Appointment details:', { 
-            patientId: appointment.patient_id, 
-            status: appointment.status 
+        console.log('📋 Appointment details:', {
+            patientId: appointment.patient_id,
+            status: appointment.status,
+            date: appointment.appointment_date
         });
 
         // Step 2: Authorization check
         if (appointment.patient_id !== req.user.id && req.user.role !== 'DOCTOR' && req.user.role !== 'ADMIN') {
             console.log('❌ Not authorized. Patient ID:', appointment.patient_id, 'User ID:', req.user.id);
-            return res.status(403).json({ 
+            return res.status(403).json({
                 success: false,
-                message: 'Not authorized to cancel this appointment' 
+                message: 'Not authorized to cancel this appointment'
             });
         }
 
-        // Step 3: Update status to REJECTED - Raw SQL with parameterized query
+        // Step 3: Validate appointment is not already cancelled or completed
+        if (appointment.status === 'CANCELLED' || appointment.status === 'REJECTED') {
+            return res.status(400).json({
+                success: false,
+                message: 'This appointment has already been cancelled'
+            });
+        }
+
+        if (appointment.status === 'COMPLETED') {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot cancel a completed appointment'
+            });
+        }
+
+        // Step 4: Validate appointment is in the future
+        const appointmentDateTime = new Date(`${appointment.appointment_date} ${appointment.appointment_time}`);
+        const now = new Date();
+
+        if (appointmentDateTime < now) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot cancel a past appointment'
+            });
+        }
+
+        // Step 5: Update status to CANCELLED
         await pool.execute(
             'UPDATE appointments SET status = ?, updated_at = NOW() WHERE id = ?',
-            ['REJECTED', id]
+            ['CANCELLED', id]
         );
 
         console.log('✅ Appointment cancelled successfully');
 
-        res.json({ 
+        // Step 6: Notify the doctor (if notification service is available)
+        try {
+            const notificationService = req.app?.get('notificationService');
+            if (notificationService && appointment.doctor_id) {
+                await notificationService.createAndEmit(appointment.doctor_id, {
+                    type: 'APPOINTMENT',
+                    title: 'Appointment Cancelled',
+                    message: `${appointment.patient_name || 'A patient'} has cancelled their appointment on ${appointment.appointment_date} at ${appointment.appointment_time}`,
+                    relatedId: id,
+                    relatedType: 'Appointment'
+                });
+                console.log('✅ Notification sent to doctor');
+            }
+        } catch (notifError) {
+            console.warn('⚠️ Failed to send notification:', notifError.message);
+            // Don't fail the cancellation if notification fails
+        }
+
+        res.json({
             success: true,
-            message: 'Appointment cancelled successfully', 
+            message: 'Appointment cancelled successfully',
             data: {
                 id: id,
-                status: 'REJECTED',
+                status: 'CANCELLED',
                 date: appointment.appointment_date,
                 time: appointment.appointment_time
             }
         });
     } catch (error) {
         console.error('❌ Error cancelling appointment:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: 'Failed to cancel appointment',
-            error: error.message 
+            error: error.message
         });
     }
 };
 
-module.exports = { 
-    getMyAppointments, 
-    bookAppointment, 
-    updateAppointment, 
-    cancelAppointment 
+module.exports = {
+    getMyAppointments,
+    bookAppointment,
+    updateAppointment,
+    cancelAppointment
 };

@@ -3,7 +3,8 @@ const pool = require('../config/db');
 
 /**
  * Middleware to protect routes - verifies JWT token
- * Attaches the authenticated user to req.user
+ * Works with new schema: users table + role-specific profile tables
+ * Supports: PATIENT, DOCTOR, HOSPITAL_ADMIN, SUPER_ADMIN
  */
 const protect = async (req, res, next) => {
     let token;
@@ -12,44 +13,86 @@ const protect = async (req, res, next) => {
         try {
             // Extract token from "Bearer <token>"
             token = req.headers.authorization.split(' ')[1];
-            
+
             // Verify token
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'aVeryStrongAndSecretKey');
-            
-            console.log('🔐 Token decoded:', { id: decoded.id, role: decoded.role });
-            
-            // Get user from appropriate table based on role
-            let userData = null;
-            
-            if (decoded.role === 'PATIENT') {
-                const [patients] = await pool.execute(
-                    'SELECT id, full_name as name, email, phone, address, blood_group FROM patients WHERE id = ?',
-                    [decoded.id]
-                );
-                userData = patients[0];
-            } else if (decoded.role === 'DOCTOR') {
-                const [doctors] = await pool.execute(
-                    'SELECT id, full_name as name, email, phone, city, specialization FROM doctors WHERE id = ?',
-                    [decoded.id]
-                );
-                userData = doctors[0];
+
+            console.log('🔐 Token decoded:', { userId: decoded.id, role: decoded.role });
+
+            // Get user from users table
+            const [users] = await pool.execute(
+                'SELECT id, email, role, is_active FROM users WHERE id = ?',
+                [decoded.id]
+            );
+
+            if (users.length === 0) {
+                console.log('❌ User not found in users table');
+                return res.status(401).json({ message: 'User not found' });
             }
 
-            if (!userData) {
-                console.log('❌ User not found in database');
-                return res.status(401).json({ message: 'User not found' });
+            const user = users[0];
+
+            // Check if user is active
+            if (!user.is_active) {
+                console.log('❌ User account is inactive');
+                return res.status(401).json({ message: 'Account is inactive' });
+            }
+
+            // Get role-specific profile data
+            let profileData = null;
+
+            if (user.role === 'PATIENT') {
+                const [patients] = await pool.execute(
+                    'SELECT id as profile_id, full_name as name, phone,address, blood_group FROM patients WHERE user_id = ?',
+                    [user.id]
+                );
+                profileData = patients[0];
+            } else if (user.role === 'DOCTOR') {
+                const [doctors] = await pool.execute(
+                    'SELECT id as profile_id, full_name as name, phone, specialization, hospital_id FROM doctors WHERE user_id = ?',
+                    [user.id]
+                );
+                profileData = doctors[0];
+            } else if (user.role === 'HOSPITAL_ADMIN') {
+                const [admins] = await pool.execute(
+                    'SELECT id as profile_id, full_name as name, phone, hospital_id, designation FROM hospital_admins WHERE user_id = ?',
+                    [user.id]
+                );
+                profileData = admins[0];
+            } else if (user.role === 'SUPER_ADMIN') {
+                const [superAdmins] = await pool.execute(
+                    'SELECT id as profile_id, full_name as name, phone FROM super_admins WHERE user_id = ?',
+                    [user.id]
+                );
+                profileData = superAdmins[0];
+            }
+
+            if (!profileData) {
+                console.log('❌ Profile not found for user');
+                return res.status(401).json({ message: 'User profile not found' });
             }
 
             // Attach user data with role to request
             req.user = {
-                ...userData,
-                role: decoded.role
+                id: user.id,  // User ID from users table
+                email: user.email,
+                role: user.role,
+                ...profileData  // Includes profile_id, name, phone, etc.
             };
 
-            console.log('✅ User authenticated:', { id: req.user.id, role: req.user.role });
+            console.log('✅ User authenticated:', {
+                userId: req.user.id,
+                profileId: req.user.profile_id,
+                role: req.user.role,
+                name: req.user.name
+            });
+
             next();
         } catch (error) {
-            console.error('Auth Error:', error.message);
+            console.error('❌ Auth Error:', error.message);
+            if (error.name === 'TokenExpiredError') {
+                return res.status(401).json({ message: 'Token expired' });
+            }
             res.status(401).json({ message: 'Not authorized, token failed' });
         }
     } else {
@@ -58,20 +101,29 @@ const protect = async (req, res, next) => {
 };
 
 /**
- * Middleware to check if user is an admin
- * Must be used AFTER the protect middleware
+ * Middleware to check if user is a Super Admin
  */
-const adminOnly = (req, res, next) => {
-    if (req.user && (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN')) {
+const superAdminOnly = (req, res, next) => {
+    if (req.user && req.user.role === 'SUPER_ADMIN') {
         next();
     } else {
-        res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+        res.status(403).json({ message: 'Access denied. Super Admin privileges required.' });
+    }
+};
+
+/**
+ * Middleware to check if user is a Hospital Admin
+ */
+const hospitalAdminOnly = (req, res, next) => {
+    if (req.user && req.user.role === 'HOSPITAL_ADMIN') {
+        next();
+    } else {
+        res.status(403).json({ message: 'Access denied. Hospital Admin privileges required.' });
     }
 };
 
 /**
  * Middleware to check if user is a doctor
- * Must be used AFTER the protect middleware
  */
 const doctorOnly = (req, res, next) => {
     if (req.user && req.user.role === 'DOCTOR') {
@@ -83,7 +135,6 @@ const doctorOnly = (req, res, next) => {
 
 /**
  * Middleware to check if user is a patient
- * Must be used AFTER the protect middleware
  */
 const patientOnly = (req, res, next) => {
     if (req.user && req.user.role === 'PATIENT') {
@@ -95,7 +146,7 @@ const patientOnly = (req, res, next) => {
 
 /**
  * Middleware to allow multiple roles
- * Usage: authorize(['DOCTOR', 'ADMIN'])
+ * Usage: authorize('DOCTOR', 'HOSPITAL_ADMIN')
  */
 const authorize = (...roles) => {
     return (req, res, next) => {
@@ -104,8 +155,8 @@ const authorize = (...roles) => {
         }
 
         if (!roles.includes(req.user.role)) {
-            return res.status(403).json({ 
-                message: `Access denied. Role '${req.user.role}' is not authorized.` 
+            return res.status(403).json({
+                message: `Access denied. Role '${req.user.role}' is not authorized for this action.`
             });
         }
 
@@ -113,10 +164,12 @@ const authorize = (...roles) => {
     };
 };
 
-module.exports = { 
-    protect, 
-    adminOnly, 
-    doctorOnly, 
+module.exports = {
+    protect,
+    superAdminOnly,
+    hospitalAdminOnly,
+    doctorOnly,
     patientOnly,
-    authorize 
+    authorize,
+    restrictTo: authorize // Alias for authorize
 };

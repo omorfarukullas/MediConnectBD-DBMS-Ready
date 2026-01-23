@@ -13,121 +13,9 @@ const generateToken = (id, role) => {
     });
 };
 
-// @desc    Register a new doctor
-// @route   POST /api/doctors/register
-const registerDoctor = async (req, res) => {
-    console.log('👨‍⚕️ Doctor Registration Request Received');
-    console.log('📋 Request Body:', JSON.stringify(req.body, null, 2));
-
-    const {
-        name,
-        email,
-        phone,
-        password,
-        city,
-        specialization,
-        bmdcNumber,
-        experience,
-        hospital,
-        degrees,
-        onlineFee,
-        physicalFee,
-        gender,
-        dateOfBirth
-    } = req.body;
-
-    // Validation
-    if (!name || !email || !password || !specialization) {
-        console.log('❌ Validation Failed - Missing required fields');
-        return res.status(400).json({
-            success: false,
-            message: 'Please provide: name, email, password, and specialization'
-        });
-    }
-
-    // Email format validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        console.log('❌ Validation Failed - Invalid email format:', email);
-        return res.status(400).json({
-            success: false,
-            message: 'Please provide a valid email address (e.g., doctor@example.com)'
-        });
-    }
-
-    try {
-        // Check if email already exists in doctors table
-        const [existingDoctors] = await pool.execute(
-            'SELECT id FROM doctors WHERE email = ?',
-            [email]
-        );
-
-        if (existingDoctors.length > 0) {
-            console.log('❌ Registration Failed - Email already exists:', email);
-            return res.status(400).json({
-                success: false,
-                message: 'A doctor with this email already exists'
-            });
-        }
-
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Parse degrees/education
-        let qualificationText = '';
-        if (degrees) {
-            if (Array.isArray(degrees)) {
-                qualificationText = degrees.join(', ');
-            } else if (typeof degrees === 'string') {
-                qualificationText = degrees;
-            }
-        }
-
-        // Insert into doctors table (matching actual schema columns)
-        const [result] = await pool.execute(
-            `INSERT INTO doctors (
-                full_name, email, password, phone, city, specialization,
-                qualification, experience_years, consultation_fee, bio
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                name,
-                email,
-                hashedPassword,
-                phone || null,
-                city || 'Dhaka',
-                specialization,
-                qualificationText || 'MBBS',
-                parseInt(experience) || 0,
-                parseFloat(onlineFee || physicalFee) || 500.00,
-                `Experienced ${specialization} at ${hospital || 'Hospital'}` || null
-            ]
-        );
-
-        const doctorId = result.insertId;
-        console.log('✅ Doctor registered successfully:', { id: doctorId, email: email });
-
-        res.status(201).json({
-            success: true,
-            message: 'Doctor registration successful',
-            data: {
-                id: doctorId,
-                name: name,
-                email: email,
-                specialization: specialization,
-                city: city,
-                token: generateToken(doctorId, 'DOCTOR')
-            }
-        });
-
-    } catch (error) {
-        console.error('❌ Doctor Registration Error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error during registration',
-            error: error.message
-        });
-    }
-};
+// NOTE: Doctor registration has been moved to userController.js
+// Use POST /api/auth/register/doctor for doctor registration
+// This uses the new schema with users table + doctors profile table
 
 // @desc    Get all doctors with filters
 // @route   GET /api/doctors
@@ -135,7 +23,7 @@ const getDoctors = async (req, res) => {
     try {
         console.log('🏥 GET /api/doctors - Fetching doctors list');
         const { search, specialty, hospital, city } = req.query;
-        
+
         // Build WHERE clause dynamically
         const conditions = [];
         const replacements = [];
@@ -154,7 +42,7 @@ const getDoctors = async (req, res) => {
         }
 
         const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-        
+
         console.log('🔍 Query filters:', { specialty, city, search });
 
         const [doctors] = await pool.execute(
@@ -174,8 +62,8 @@ const getDoctors = async (req, res) => {
             specialization: doc.specialization || 'General Medicine',
             hospital: 'Not specified',
             location: doc.city || 'Dhaka',
-            fees: { 
-                online: parseFloat(doc.consultation_fee || 0), 
+            fees: {
+                online: parseFloat(doc.consultation_fee || 0),
                 physical: parseFloat(doc.consultation_fee || 0)
             },
             degrees: doc.qualification ? doc.qualification.split(',').map(d => d.trim()) : ['MBBS'],
@@ -199,7 +87,7 @@ const getDoctorById = async (req, res) => {
             'SELECT * FROM doctors WHERE id = ?',
             [req.params.id]
         );
-        
+
         if (doctors.length > 0) {
             const doc = doctors[0];
             res.json({
@@ -231,50 +119,84 @@ const authDoctor = async (req, res) => {
 
     try {
         console.log('🔐 Doctor Login Request:', { email, password: password ? '***' + password.slice(-3) : 'MISSING' });
-        
+
         // Validate input
         if (!email || !password) {
             return res.status(400).json({ message: 'Please provide email and password' });
         }
 
-        // Find doctor by email in doctors table
-        const [doctors] = await pool.execute(
-            'SELECT id, full_name, email, password, phone, specialization, city FROM doctors WHERE email = ?',
-            [email]
+        // Step 1: Find user by email in users table and verify role is DOCTOR
+        const [users] = await pool.execute(
+            'SELECT id, email, password, role FROM users WHERE email = ? AND role = ?',
+            [email, 'DOCTOR']
         );
 
-        if (doctors.length === 0) {
-            console.log('❌ Login failed - Doctor not found:', email);
+        if (users.length === 0) {
+            console.log('❌ Login failed - Doctor user not found:', email);
             return res.status(401).json({ message: 'Invalid email or password' });
         }
 
-        const doctor = doctors[0];
-        
-        console.log('👨‍⚕️ Doctor Found in DB:', { 
-            id: doctor.id, 
-            email: doctor.email,
-            name: doctor.full_name
+        const user = users[0];
+
+        console.log('👤 Doctor User Found in DB:', {
+            userId: user.id,
+            email: user.email,
+            role: user.role
         });
 
-        // Check password
-        const isMatch = await bcrypt.compare(password, doctor.password);
+        // Step 2: Check password
+        const isMatch = await bcrypt.compare(password, user.password);
 
-        if (isMatch) {
-            console.log('✅ Password match successful for:', email);
-            res.json({
-                id: doctor.id,
-                name: doctor.full_name,
-                email: doctor.email,
-                phone: doctor.phone,
-                specialization: doctor.specialization,
-                city: doctor.city,
-                role: 'DOCTOR',
-                token: generateToken(doctor.id, 'DOCTOR')
-            });
-        } else {
+        if (!isMatch) {
             console.log('❌ Login failed - Password mismatch for:', email);
-            res.status(401).json({ message: 'Invalid email or password' });
+            return res.status(401).json({ message: 'Invalid email or password' });
         }
+
+        console.log('✅ Password match successful for:', email);
+
+        // Step 3: Fetch doctor profile data from doctors table
+        const [doctors] = await pool.execute(
+            `SELECT d.id, d.user_id, d.full_name, d.phone, d.specialization, d.qualification, 
+                    d.bmdc_number, d.consultation_fee, d.experience_years, d.bio, d.hospital_id, 
+                    h.name as hospital_name, h.city
+             FROM doctors d
+             LEFT JOIN hospitals h ON d.hospital_id = h.id
+             WHERE d.user_id = ?`,
+            [user.id]
+        );
+
+        if (doctors.length === 0) {
+            console.log('❌ Doctor profile not found for user_id:', user.id);
+            return res.status(404).json({ message: 'Doctor profile not found' });
+        }
+
+        const doctor = doctors[0];
+
+        console.log('👨‍⚕️ Doctor Profile Found:', {
+            doctorId: doctor.id,
+            name: doctor.full_name,
+            hospital: doctor.hospital_name
+        });
+
+        // Step 4: Return user data with JWT token
+        res.json({
+            id: doctor.id,
+            userId: user.id,
+            name: doctor.full_name,
+            email: user.email,
+            phone: doctor.phone,
+            specialization: doctor.specialization,
+            qualification: doctor.qualification,
+            bmdcNumber: doctor.bmdc_number,
+            consultationFee: doctor.consultation_fee,
+            experienceYears: doctor.experience_years,
+            bio: doctor.bio,
+            hospitalId: doctor.hospital_id,
+            hospitalName: doctor.hospital_name,
+            city: doctor.city,
+            role: 'DOCTOR',
+            token: generateToken(user.id, 'DOCTOR')
+        });
 
     } catch (error) {
         console.error('❌ Doctor Login Error:', error);
@@ -282,4 +204,4 @@ const authDoctor = async (req, res) => {
     }
 };
 
-module.exports = { registerDoctor, authDoctor, getDoctors, getDoctorById };
+module.exports = { authDoctor, getDoctors, getDoctorById };

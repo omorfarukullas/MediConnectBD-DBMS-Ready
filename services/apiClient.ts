@@ -4,9 +4,15 @@
  * ARCHITECTURE: Direct connection to Node.js Backend (No API Gateway)
  */
 
+// Ensure the API URL is correctly set - backend runs on port 5000
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 console.log('🌐 API Client initialized with base URL:', API_BASE_URL);
+console.log('🔍 Environment check:', {
+  VITE_API_URL: import.meta.env.VITE_API_URL,
+  mode: import.meta.env.MODE,
+  dev: import.meta.env.DEV
+});
 
 // Types
 export interface LoginResponse {
@@ -92,7 +98,7 @@ class HttpClient {
     options: RequestInit = {}
   ): Promise<T> {
     const token = TokenManager.getToken();
-    
+
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -153,6 +159,13 @@ class HttpClient {
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
+
+  async patch<T>(endpoint: string, data?: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 // API Service
@@ -163,8 +176,13 @@ class ApiService {
     this.http = new HttpClient(API_BASE_URL);
   }
 
+  // Expose base URL for direct fetch calls
+  private get baseURL(): string {
+    return API_BASE_URL;
+  }
+
   // ==================== Authentication ====================
-  
+
   async register(data: RegisterData): Promise<LoginResponse> {
     const response = await this.http.post<LoginResponse>('/auth/register', data);
     TokenManager.setToken(response.token);
@@ -216,7 +234,7 @@ class ApiService {
     return response;
   }
 
-  async getDoctors(params?: { specialization?: string; search?: string }) {
+  async getDoctors(params?: { specialization?: string; search?: string }): Promise<any> {
     let endpoint = '/doctors';
     if (params) {
       const queryParams = new URLSearchParams(params as any).toString();
@@ -225,22 +243,22 @@ class ApiService {
     return this.http.get(endpoint);
   }
 
-  async getDoctorById(id: number) {
+  async getDoctorById(id: number): Promise<any> {
     return this.http.get(`/doctors/${id}`);
   }
 
   // ==================== Appointments ====================
 
-  async getAppointments() {
+  async getAppointments(): Promise<any> {
     return this.http.get('/appointments/my');
   }
 
-  async createAppointment(data: any) {
+  async createAppointment(data: any): Promise<any> {
     console.log('📡 API Client: Creating appointment...');
     console.log('📤 Endpoint: POST /appointments');
     console.log('📦 Data:', data);
     console.log('🔑 Token:', TokenManager.getToken() ? 'Present' : 'MISSING!');
-    
+
     try {
       const response = await this.http.post('/appointments', data);
       console.log('✅ API Response:', response);
@@ -251,15 +269,15 @@ class ApiService {
     }
   }
 
-  async getAppointmentById(id: number) {
+  async getAppointmentById(id: number): Promise<any> {
     return this.http.get(`/appointments/${id}`);
   }
 
-  async updateAppointment(id: number, data: any) {
+  async updateAppointment(id: number, data: any): Promise<any> {
     return this.http.put(`/appointments/${id}`, data);
   }
 
-  async cancelAppointment(id: number) {
+  async cancelAppointment(id: number): Promise<any> {
     return this.http.patch(`/appointments/${id}/cancel`, {});
   }
 
@@ -318,7 +336,7 @@ class ApiService {
 
   async uploadDocument(file: File | FormData, documentType?: string, description?: string) {
     let formData: FormData;
-    
+
     if (file instanceof FormData) {
       formData = file;
     } else {
@@ -328,11 +346,26 @@ class ApiService {
       if (description) formData.append('description', description);
     }
 
-    return this.http.post('/documents/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+    // Note: For file uploads, we need to use fetch directly
+    // because the http client adds Content-Type: application/json
+    const token = TokenManager.getToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/documents/upload`, {
+      method: 'POST',
+      headers,
+      body: formData
     });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Upload failed');
+    }
+
+    return response.json();
   }
 
   async getDocuments() {
@@ -357,11 +390,11 @@ class ApiService {
         'Authorization': `Bearer ${TokenManager.getToken()}`
       }
     });
-    
+
     if (!response.ok) {
       throw new Error('Failed to download document');
     }
-    
+
     return response.blob();
   }
 
@@ -396,7 +429,7 @@ class ApiService {
   }
 
   // ==================== Generic Methods ====================
-  
+
   async get<T = any>(endpoint: string): Promise<{ data: T }> {
     const result = await this.http.get<T>(endpoint);
     return { data: result };

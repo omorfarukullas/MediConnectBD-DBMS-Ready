@@ -1,47 +1,47 @@
 const express = require('express');
 const router = express.Router();
-const { protect } = require('../middleware/authMiddleware');
+const { protect, restrictTo } = require('../middleware/authMiddleware');
 const {
-    getQueueByDate,
+    getTodayQueue,
     callNextPatient,
-    getPatientQueueStatus,
-    getQueueDates,
-    resetQueue
+    startAppointment,
+    completeAppointment,
+    getMyPosition
 } = require('../controllers/queueController');
 
 /**
- * @route   GET /api/queue/dates
- * @desc    Get all dates with queues for doctor
- * @access  Private (Doctor)
+ * @route   GET /api/queue/doctor/:doctorId/today
+ * @desc    Get today's queue for a doctor
+ * @access  Private (Doctor, Admin)
  */
-router.get('/dates', protect, getQueueDates);
-
-/**
- * @route   GET /api/queue/:date
- * @desc    Get queue for specific date
- * @access  Private (Doctor)
- */
-router.get('/:date', protect, getQueueByDate);
+router.get('/doctor/:doctorId/today', protect, restrictTo('DOCTOR', 'ADMIN'), getTodayQueue);
 
 /**
  * @route   POST /api/queue/next
  * @desc    Call next patient in queue
  * @access  Private (Doctor)
  */
-router.post('/next', protect, callNextPatient);
+router.post('/next', protect, restrictTo('DOCTOR'), callNextPatient);
 
 /**
- * @route   GET /api/queue/patient/:appointmentId
- * @desc    Get queue status for patient
- * @access  Private (Patient)
- */
-router.get('/patient/:appointmentId', protect, getPatientQueueStatus);
-
-/**
- * @route   POST /api/queue/reset
- * @desc    Reset queue for a date
+ * @route   PUT /api/queue/:appointmentId/start
+ * @desc    Start patient appointment (mark as IN_PROGRESS)
  * @access  Private (Doctor)
  */
-router.post('/reset', protect, resetQueue);
+router.put('/:appointmentId/start', protect, restrictTo('DOCTOR'), startAppointment);
+
+/**
+ * @route   PUT /api/queue/:appointmentId/complete
+ * @desc    Complete patient appointment
+ * @access  Private (Doctor)
+ */
+router.put('/:appointmentId/complete', protect, restrictTo('DOCTOR'), completeAppointment);
+
+/**
+ * @route   GET /api/queue/my-position
+ * @desc    Get patient's current queue position
+ * @access  Private (Patient)
+ */
+router.get('/my-position', protect, restrictTo('PATIENT'), getMyPosition);
 
 module.exports = router;

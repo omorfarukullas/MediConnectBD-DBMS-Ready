@@ -1,98 +1,97 @@
+/**
+ * Queue Controller
+ * Handles live queue tracking and management
+ * Updated to work with current appointments table schema
+ */
+
 const pool = require('../config/db');
 
 /**
- * @desc    Get queue for a specific date (Doctor only)
- * @route   GET /api/queue/:date
+ * @desc    Get today's queue for a doctor
+ * @route   GET /api/queue/doctor/:doctorId/today
  * @access  Private (Doctor)
  */
-const getQueueByDate = async (req, res) => {
+const getTodayQueue = async (req, res) => {
+    const { doctorId } = req.params;
+    const today = new Date().toISOString().split('T')[0];
+
     try {
-        const doctorId = req.user.id;
-        const { date } = req.params;
-
-        // Get all appointments for this doctor on this date, ordered by queue number
-        const [appointments] = await pool.execute(`
-            SELECT 
-                a.id,
-                a.appointment_date as date,
-                a.appointment_time as time,
-                a.queue_number,
-                a.queue_status,
-                a.estimated_time,
-                a.called_at,
-                a.reason_for_visit as reason,
-                p.id as patient_id,
-                p.full_name as patient_name,
-                p.email as patient_email,
-                p.phone as patient_phone
-            FROM appointments a
-            JOIN patients p ON a.patient_id = p.id
-            WHERE a.doctor_id = ? 
-            AND a.appointment_date = ?
-            AND a.status IN ('PENDING', 'ACCEPTED')
-            ORDER BY a.queue_number ASC, a.appointment_time ASC
-        `, [doctorId, date]);
-
-        // If no queue numbers assigned yet, assign them
-        if (appointments.length > 0 && !appointments[0].queue_number) {
-            await assignQueueNumbers(doctorId, date);
-            // Fetch again with queue numbers
-            const [updatedAppointments] = await pool.execute(`
-                SELECT 
-                    a.id,
-                    a.appointment_date as date,
-                    a.appointment_time as time,
-                    a.queue_number,
-                    a.queue_status,
-                    a.estimated_time,
-                    a.called_at,
-                    a.reason_for_visit as reason,
-                    p.id as patient_id,
-                    p.full_name as patient_name,
-                    p.email as patient_email,
-                    p.phone as patient_phone
-                FROM appointments a
-                JOIN patients p ON a.patient_id = p.id
-                WHERE a.doctor_id = ? 
-                AND a.appointment_date = ?
-                AND a.status IN ('PENDING', 'ACCEPTED')
-                ORDER BY a.queue_number ASC
-            `, [doctorId, date]);
-            
-            return res.json(updatedAppointments);
+        // Verify the requesting user is the doctor or admin
+        if (req.user.profile_id !== parseInt(doctorId) && req.user.role !== 'ADMIN') {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to view this queue'
+            });
         }
 
-        res.json(appointments);
+        const [appointments] = await pool.execute(
+            `SELECT 
+                a.id,
+                a.patient_id,
+                a.appointment_date,
+                a.appointment_time,
+                aq.queue_number,
+                a.consultation_type,
+                a.status,
+                a.reason_for_visit,
+                a.started_at,
+                a.completed_at,
+                a.completed_at,
+                p.full_name as patient_name,
+                p.phone
+            FROM appointments a
+            LEFT JOIN patients p ON a.patient_id = p.id
+            LEFT JOIN appointment_queue aq ON a.id = aq.appointment_id
+            WHERE a.doctor_id = ? 
+            AND a.appointment_date = ?
+            AND a.status != 'CANCELLED'
+            ORDER BY aq.queue_number ASC`,
+            [doctorId, today]
+        );
+
+        // Calculate queue statistics
+        const stats = {
+            total: appointments.length,
+            waiting: appointments.filter(a => a.status === 'PENDING').length,
+            inProgress: appointments.filter(a => a.status === 'IN_PROGRESS').length,
+            completed: appointments.filter(a => a.status === 'COMPLETED').length
+        };
+
+        // Find current patient
+        const currentPatient = appointments.find(a => a.status === 'IN_PROGRESS');
+
+        res.json({
+            success: true,
+            data: {
+                appointments: appointments.map(a => ({
+                    id: a.id,
+                    patientId: a.patient_id,
+                    patientName: a.patient_name,
+                    phone: a.phone,
+                    queueNumber: a.queue_number,
+                    appointmentTime: a.appointment_time,
+                    consultationType: a.consultation_type,
+                    status: a.status,
+                    reasonForVisit: a.reason_for_visit,
+                    startedAt: a.started_at,
+                    completedAt: a.completed_at
+                })),
+                stats,
+                currentPatient: currentPatient ? {
+                    id: currentPatient.id,
+                    queueNumber: currentPatient.queue_number,
+                    patientName: currentPatient.patient_name
+                } : null,
+                date: today
+            }
+        });
     } catch (error) {
-        console.error('Get queue error:', error);
-        res.status(500).json({ message: 'Server error while fetching queue' });
-    }
-};
-
-/**
- * Helper function to assign queue numbers
- */
-const assignQueueNumbers = async (doctorId, date) => {
-    const [appointments] = await pool.execute(`
-        SELECT id, appointment_time FROM appointments 
-        WHERE doctor_id = ? AND appointment_date = ? 
-        AND status IN ('PENDING', 'ACCEPTED')
-        AND queue_number IS NULL
-        ORDER BY appointment_time ASC
-    `, [doctorId, date]);
-
-    for (let i = 0; i < appointments.length; i++) {
-        const avgConsultTime = 15; // 15 minutes per patient
-        const estimatedTime = new Date(`${date}T${appointments[0]?.appointment_time || '09:00'}`);
-        estimatedTime.setMinutes(estimatedTime.getMinutes() + (i * avgConsultTime));
-
-        await pool.execute(`
-            UPDATE appointments 
-            SET queue_number = ?, 
-                estimated_time = ?,
-                queue_status = 'waiting'
-            WHERE id = ?
-        `, [i + 1, estimatedTime, appointments[i].id]);
+        console.error('❌ Error fetching queue:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch queue',
+            error: error.message
+        });
     }
 };
 
@@ -102,219 +101,309 @@ const assignQueueNumbers = async (doctorId, date) => {
  * @access  Private (Doctor)
  */
 const callNextPatient = async (req, res) => {
+    const doctorId = req.user.profile_id;
+    const today = new Date().toISOString().split('T')[0];
+
     try {
-        const doctorId = req.user.id;
-        const { date, currentAppointmentId } = req.body;
-
-        // Mark current appointment as completed if provided
-        if (currentAppointmentId) {
-            await pool.execute(`
-                UPDATE appointments 
-                SET queue_status = 'completed',
-                    status = 'COMPLETED'
-                WHERE id = ? AND doctor_id = ?
-            `, [currentAppointmentId, doctorId]);
-        }
-
-        // Get next patient in queue
-        const [nextPatients] = await pool.execute(`
-            SELECT 
-                a.id,
-                a.appointment_date as date,
-                a.appointment_time as time,
-                a.queue_number,
-                a.queue_status,
-                a.estimated_time,
-                a.reason_for_visit as reason,
-                p.id as patient_id,
-                p.full_name as patient_name,
-                p.email as patient_email,
-                p.phone as patient_phone
+        // Find next PENDING patient in queue
+        const [nextPatients] = await pool.execute(
+            `SELECT 
+                a.*,
+                aq.queue_number,
+                p.full_name as patient_name
             FROM appointments a
-            JOIN patients p ON a.patient_id = p.id
-            WHERE a.doctor_id = ? 
+            LEFT JOIN patients p ON a.patient_id = p.id
+            LEFT JOIN appointment_queue aq ON a.id = aq.appointment_id
+            WHERE a.doctor_id = ?
             AND a.appointment_date = ?
-            AND a.queue_status = 'waiting'
-            AND a.status IN ('PENDING', 'ACCEPTED')
-            ORDER BY a.queue_number ASC
-            LIMIT 1
-        `, [doctorId, date]);
+            AND a.status = 'PENDING'
+            AND aq.queue_number IS NOT NULL
+            ORDER BY aq.queue_number ASC
+            LIMIT 1`,
+            [doctorId, today]
+        );
 
         if (nextPatients.length === 0) {
-            return res.json({ message: 'No more patients in queue', completed: true });
+            return res.json({
+                success: true,
+                message: 'No patients waiting in queue',
+                data: null
+            });
         }
 
         const nextPatient = nextPatients[0];
 
-        // Update next patient status to in_progress
-        await pool.execute(`
-            UPDATE appointments 
-            SET queue_status = 'in_progress',
-                called_at = NOW()
-            WHERE id = ?
-        `, [nextPatient.id]);
-
-        // Recalculate estimated times for remaining patients
-        await updateEstimatedTimes(doctorId, date);
-
-        // Emit socket event for real-time update
+        // Emit WebSocket event if io is available
         const io = req.app.get('io');
         if (io) {
-            io.to(`patient_${nextPatient.patient_id}`).emit('queue_update', {
-                status: 'called',
+            io.to(`doctor-${doctorId}`).emit('queue:next', {
                 appointmentId: nextPatient.id,
-                message: 'You are being called now!'
+                queueNumber: nextPatient.queue_number,
+                patientName: nextPatient.patient_name
             });
 
-            // Notify other waiting patients
-            io.to(`doctor_${doctorId}_queue`).emit('queue_updated', {
-                date,
-                currentPatient: nextPatient
+            io.to(`patient-${nextPatient.patient_id}`).emit('queue:called', {
+                appointmentId: nextPatient.id,
+                queueNumber: nextPatient.queue_number,
+                message: 'You have been called! Please proceed to the doctor.'
             });
         }
 
         res.json({
+            success: true,
             message: 'Next patient called',
-            patient: nextPatient
+            data: {
+                appointmentId: nextPatient.id,
+                queueNumber: nextPatient.queue_number,
+                patientName: nextPatient.patient_name,
+                patientId: nextPatient.patient_id
+            }
         });
     } catch (error) {
-        console.error('Call next patient error:', error);
-        res.status(500).json({ message: 'Server error while calling next patient' });
+        console.error('❌ Error calling next patient:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to call next patient',
+            error: error.message
+        });
     }
 };
 
 /**
- * Helper function to update estimated times
+ * @desc    Start patient appointment (mark as IN_PROGRESS)
+ * @route   PUT /api/queue/:appointmentId/start
+ * @access  Private (Doctor)
  */
-const updateEstimatedTimes = async (doctorId, date) => {
-    const [waitingPatients] = await pool.execute(`
-        SELECT id, queue_number FROM appointments 
-        WHERE doctor_id = ? AND appointment_date = ? 
-        AND queue_status = 'waiting'
-        ORDER BY queue_number ASC
-    `, [doctorId, date]);
+const startAppointment = async (req, res) => {
+    const { appointmentId } = req.params;
+    const doctorId = req.user.profile_id;
 
-    const avgConsultTime = 15; // 15 minutes
-    const now = new Date();
-
-    for (let i = 0; i < waitingPatients.length; i++) {
-        const estimatedTime = new Date(now.getTime() + ((i + 1) * avgConsultTime * 60000));
-        
-        await pool.execute(`
-            UPDATE appointments 
-            SET estimated_time = ?
-            WHERE id = ?
-        `, [estimatedTime, waitingPatients[i].id]);
-    }
-};
-
-/**
- * @desc    Get queue status for a patient
- * @route   GET /api/queue/patient/:appointmentId
- * @access  Private (Patient)
- */
-const getPatientQueueStatus = async (req, res) => {
     try {
-        const userId = req.user.id;
-        const { appointmentId } = req.params;
-
-        const [appointments] = await pool.execute(`
-            SELECT 
-                a.id,
-                a.appointment_date as date,
-                a.appointment_time as time,
-                a.queue_number,
-                a.queue_status,
-                a.estimated_time,
-                a.called_at,
-                d.full_name as doctor_name,
-                d.specialization,
-                (SELECT COUNT(*) FROM appointments 
-                 WHERE doctor_id = a.doctor_id 
-                 AND appointment_date = a.appointment_date 
-                 AND queue_status = 'waiting' 
-                 AND queue_number < a.queue_number) as patients_before
-            FROM appointments a
-            JOIN doctors d ON a.doctor_id = d.id
-            WHERE a.id = ? AND a.patient_id = ?
-        `, [appointmentId, userId]);
+        // Verify appointment belongs to this doctor
+        const [appointments] = await pool.execute(
+            'SELECT * FROM appointments WHERE id = ? AND doctor_id = ?',
+            [appointmentId, doctorId]
+        );
 
         if (appointments.length === 0) {
-            return res.status(404).json({ message: 'Appointment not found' });
+            return res.status(404).json({
+                success: false,
+                message: 'Appointment not found or not authorized'
+            });
         }
 
-        res.json(appointments[0]);
+        const appointment = appointments[0];
+
+        if (appointment.status === 'IN_PROGRESS') {
+            return res.status(400).json({
+                success: false,
+                message: 'Appointment already in progress'
+            });
+        }
+
+        if (appointment.status === 'COMPLETED') {
+            return res.status(400).json({
+                success: false,
+                message: 'Appointment already completed'
+            });
+        }
+
+        // Update appointment status
+        await pool.execute(
+            `UPDATE appointments 
+             SET status = 'IN_PROGRESS', 
+                 started_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [appointmentId]
+        );
+
+        // Emit WebSocket event
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`doctor-${doctorId}`).emit('queue:update', {
+                appointmentId,
+                status: 'IN_PROGRESS'
+            });
+
+            io.to(`patient-${appointment.patient_id}`).emit('appointment:started', {
+                appointmentId,
+                message: 'Your appointment has started'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Appointment started',
+            data: {
+                appointmentId,
+                status: 'IN_PROGRESS',
+                startedAt: new Date()
+            }
+        });
     } catch (error) {
-        console.error('Get patient queue status error:', error);
-        res.status(500).json({ message: 'Server error while fetching queue status' });
+        console.error('❌ Error starting appointment:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to start appointment',
+            error: error.message
+        });
     }
 };
 
 /**
- * @desc    Get all queue dates for doctor
- * @route   GET /api/queue/dates
+ * @desc    Complete patient appointment
+ * @route   PUT /api/queue/:appointmentId/complete
  * @access  Private (Doctor)
  */
-const getQueueDates = async (req, res) => {
+const completeAppointment = async (req, res) => {
+    const { appointmentId } = req.params;
+    const doctorId = req.user.profile_id;
+
     try {
-        const doctorId = req.user.id;
+        // Verify appointment belongs to this doctor
+        const [appointments] = await pool.execute(
+            'SELECT * FROM appointments WHERE id = ? AND doctor_id = ?',
+            [appointmentId, doctorId]
+        );
 
-        const [dates] = await pool.execute(`
-            SELECT DISTINCT 
-                appointment_date as date,
-                COUNT(*) as total_appointments,
-                SUM(CASE WHEN queue_status = 'waiting' THEN 1 ELSE 0 END) as waiting,
-                SUM(CASE WHEN queue_status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
-                SUM(CASE WHEN queue_status = 'completed' THEN 1 ELSE 0 END) as completed
-            FROM appointments
-            WHERE doctor_id = ? 
-            AND appointment_date >= CURDATE()
-            AND status IN ('PENDING', 'ACCEPTED', 'COMPLETED')
-            GROUP BY appointment_date
-            ORDER BY appointment_date ASC
-        `, [doctorId]);
+        if (appointments.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Appointment not found or not authorized'
+            });
+        }
 
-        res.json(dates);
+        const appointment = appointments[0];
+
+        if (appointment.status === 'COMPLETED') {
+            return res.status(400).json({
+                success: false,
+                message: 'Appointment already completed'
+            });
+        }
+
+        // Update appointment status
+        await pool.execute(
+            `UPDATE appointments 
+             SET status = 'COMPLETED', 
+                 completed_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [appointmentId]
+        );
+
+        // Emit WebSocket event
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`doctor-${doctorId}`).emit('queue:update', {
+                appointmentId,
+                status: 'COMPLETED'
+            });
+
+            io.to(`patient-${appointment.patient_id}`).emit('appointment:completed', {
+                appointmentId,
+                message: 'Your appointment has been completed'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Appointment completed',
+            data: {
+                appointmentId,
+                status: 'COMPLETED',
+                completedAt: new Date()
+            }
+        });
     } catch (error) {
-        console.error('Get queue dates error:', error);
-        res.status(500).json({ message: 'Server error while fetching queue dates' });
+        console.error('❌ Error completing appointment:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to complete appointment',
+            error: error.message
+        });
     }
 };
 
 /**
- * @desc    Reset queue for a date (start fresh)
- * @route   POST /api/queue/reset
- * @access  Private (Doctor)
+ * @desc    Get patient's current queue position
+ * @route   GET /api/queue/my-position
+ * @access  Private (Patient)
  */
-const resetQueue = async (req, res) => {
+const getMyPosition = async (req, res) => {
+    const patientId = req.user.profile_id;
+    const today = new Date().toISOString().split('T')[0];
+
     try {
-        const doctorId = req.user.id;
-        const { date } = req.body;
+        // Get patient's appointment for today
+        const [myAppointments] = await pool.execute(
+            `SELECT 
+                a.*,
+                d.full_name as doctor_name,
+                d.specialization
+            FROM appointments a
+            LEFT JOIN doctors d ON a.doctor_id = d.id
+            WHERE a.patient_id = ?
+            AND a.appointment_date = ?
+            AND a.status IN ('PENDING', 'IN_PROGRESS')
+            ORDER BY a.appointment_time ASC
+            LIMIT 1`,
+            [patientId, today]
+        );
 
-        // Reset all appointments for this date
-        await pool.execute(`
-            UPDATE appointments 
-            SET queue_status = 'waiting',
-                called_at = NULL
-            WHERE doctor_id = ? 
-            AND appointment_date = ?
-            AND queue_status != 'completed'
-        `, [doctorId, date]);
+        if (myAppointments.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No active appointments for today',
+                data: null
+            });
+        }
 
-        // Reassign queue numbers
-        await assignQueueNumbers(doctorId, date);
+        const myAppointment = myAppointments[0];
 
-        res.json({ message: 'Queue reset successfully' });
+        // Count how many patients are ahead in the queue
+        const [ahead] = await pool.execute(
+            `SELECT COUNT(*) as count
+            FROM appointments a
+            JOIN appointment_queue aq ON a.id = aq.appointment_id
+            WHERE a.doctor_id = ?
+            AND a.appointment_date = ?
+            AND aq.queue_number < ?
+            AND a.status = 'PENDING'`,
+            [myAppointment.doctor_id, today, myAppointment.queue_number]
+        );
+
+        const patientsAhead = ahead[0].count;
+
+        res.json({
+            success: true,
+            data: {
+                appointmentId: myAppointment.id,
+                queueNumber: myAppointment.queue_number,
+                status: myAppointment.status,
+                appointmentTime: myAppointment.appointment_time,
+                doctorName: myAppointment.doctor_name,
+                specialization: myAppointment.specialization,
+                patientsAhead,
+                estimatedWaitMinutes: patientsAhead * 15, // Rough estimate: 15 min per patient
+                isYourTurn: myAppointment.status === 'IN_PROGRESS'
+            }
+        });
     } catch (error) {
-        console.error('Reset queue error:', error);
-        res.status(500).json({ message: 'Server error while resetting queue' });
+        console.error('❌ Error getting queue position:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get queue position',
+            error: error.message
+        });
     }
 };
 
 module.exports = {
-    getQueueByDate,
+    getTodayQueue,
     callNextPatient,
-    getPatientQueueStatus,
-    getQueueDates,
-    resetQueue
+    startAppointment,
+    completeAppointment,
+    getMyPosition
 };

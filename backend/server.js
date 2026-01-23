@@ -22,6 +22,8 @@ const documentRoutes = require('./routes/documentRoutes');
 const prescriptionRoutes = require('./routes/prescriptionRoutes');
 const queueRoutes = require('./routes/queueRoutes');
 const slotRoutes = require('./routes/slotRoutes');
+const hospitalAdminRoutes = require('./routes/hospitalAdminRoutes');
+const superAdminRoutes = require('./routes/superAdminRoutes');
 console.log('✅ All routes loaded');
 
 dotenv.config();
@@ -31,7 +33,7 @@ const server = http.createServer(app);
 
 // Socket.io setup
 const io = new Server(server, {
-    cors: { 
+    cors: {
         origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003"],
         credentials: true
     }
@@ -41,8 +43,24 @@ const io = new Server(server, {
 app.set('io', io);
 
 // Middleware - CORS Configuration for Direct Frontend Connection
+// Middleware - CORS Configuration
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'],
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        const allowedOrigins = [
+            'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003',
+            'http://127.0.0.1:3000', 'http://127.0.0.1:3001', 'http://127.0.0.1:3002', 'http://127.0.0.1:5173',
+            'http://localhost:5173'
+        ];
+
+        if (allowedOrigins.indexOf(origin) !== -1 || true) { // TEMPORARY: Allow all for debugging
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -53,8 +71,8 @@ app.use('/uploads', express.static('uploads'));
 
 // Health check route
 app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
+    res.json({
+        status: 'OK',
         message: 'MediConnect BD API is running',
         timestamp: new Date().toISOString()
     });
@@ -77,11 +95,15 @@ app.use('/api/queue', queueRoutes);
 app.use('/api/vitals', require('./routes/vitalsRoutes'));
 // Slot management routes for appointments
 app.use('/api/slots', slotRoutes);
+// Hospital Admin routes (resource management)
+app.use('/api/hospital-admin', hospitalAdminRoutes);
+// Super Admin routes (system-wide administration)
+app.use('/api/super-admin', superAdminRoutes);
 
 // Socket.IO authentication middleware
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
-    
+
     if (!token) {
         return next(new Error('Authentication error: No token provided'));
     }
@@ -101,13 +123,13 @@ const connectedUsers = new Map();
 
 io.on('connection', (socket) => {
     console.log(`✅ User connected: ${socket.userId} (${socket.userRole}) - Socket: ${socket.id}`);
-    
+
     // Store user's socket connection
     connectedUsers.set(socket.userId, socket.id);
 
     // Join user's personal notification room
     socket.join(`user_${socket.userId}`);
-    
+
     // Join patient room for queue updates
     socket.join(`patient_${socket.userId}`);
 
@@ -117,7 +139,7 @@ io.on('connection', (socket) => {
         socket.join(`doctor_${socket.userId}_queue`);
     }
 
-    // Handle queue joining for patients
+    // Enhanced queue room joining for patients
     socket.on('join_queue', (doctorId) => {
         socket.join(`queue_${doctorId}`);
         console.log(`👤 User ${socket.userId} joined queue for doctor ${doctorId}`);
@@ -129,7 +151,25 @@ io.on('connection', (socket) => {
         console.log(`👋 User ${socket.userId} left queue for doctor ${doctorId}`);
     });
 
-    // Queue update from doctor
+    // Join doctor-specific queue room (for new queue system)
+    socket.on('join-doctor-room', (doctorId) => {
+        socket.join(`doctor-${doctorId}`);
+        console.log(`👨‍⚕️ Doctor ${socket.userId} joined their queue room`);
+    });
+
+    // Join patient-specific room (for new queue system)
+    socket.on('join-patient-room', (patientId) => {
+        socket.join(`patient-${patientId}`);
+        console.log(`👤 Patient ${socket.userId} joined their notification room`);
+    });
+
+    // Leave room
+    socket.on('leave-room', (roomName) => {
+        socket.leave(roomName);
+        console.log(`👋 User ${socket.userId} left room: ${roomName}`);
+    });
+
+    // Queue update from doctor (legacy support)
     socket.on('update_queue', (data) => {
         io.to(`queue_${data.doctorId}`).emit('queue_updated', data);
         console.log(`📊 Queue updated for doctor ${data.doctorId}:`, data);

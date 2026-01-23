@@ -1,0 +1,262 @@
+# Database Setup & Installation Guide
+
+## Prerequisites Check
+
+Before starting, ensure you have:
+- ✅ Node.js (v18 or higher) installed
+- ✅ MySQL (v8 or higher) running
+- ✅ MySQL root/admin access
+
+---
+
+## Step 1: Install Backend Dependencies
+
+```bash
+# Navigate to backend directory
+cd backend
+
+# Install all dependencies (including Faker.js)
+npm install
+```
+
+This will install:
+- `@faker-js/faker` - For realistic test data generation
+- `bcryptjs` - For password hashing
+- `mysql2` - MySQL database driver
+- All other backend dependencies
+
+---
+
+## Step 2: Configure Database Connection
+
+1. **Check your [.env](file:///c:/Users/omorf/MediConnectBD/MediConnect-BD3.0/.env) file** in `backend/` directory:
+```env
+# Server Configuration
+PORT=5000
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASS=your_mysql_password
+DB_NAME=mediconnect
+
+# JWT Configuration
+JWT_SECRET=aVeryStrongAndSecretKey
+```
+
+2. **Update the password** with your MySQL root password
+
+---
+
+## Step 3: Create Database
+
+Open MySQL command line or MySQL Workbench:
+
+```sql
+CREATE DATABASE mediconnect;
+USE mediconnect;
+```
+
+Or from terminal:
+```bash
+mysql -u root -p
+# Enter password
+mysql> CREATE DATABASE mediconnect;
+mysql> exit;
+```
+
+---
+
+## Step 4: Apply Database Schema
+
+```bash
+# From backend directory
+mysql -u root -p mediconnect < database/schema.sql
+
+# You'll be prompted for MySQL password
+```
+
+This creates all 16 tables with proper:
+- Primary keys
+- Foreign keys
+- Indexes
+- Constraints
+- ENUM types
+
+---
+
+## Step 5: Seed Database with Faker.js
+
+```bash
+# From backend directory
+npm run seed
+```
+
+You should see output like:
+```
+🚀 Starting MediConnect BD Database Seeding...
+============================================================
+✅ Database connected successfully
+
+Phase 1: Core Users
+------------------------------------------------------------
+🌱 Seeding `users...
+✅ Created 142 users
+   📧 Super Admin: superadmin@mediconnect.com / password123
+
+Phase 2: Hospital Infrastructure
+------------------------------------------------------------
+🌱 Seeding hospitals...
+✅ Created 15 hospitals with resources, departments, tests, and ambulances
+
+... (continues for all phases)
+
+============================================================
+✅ Database seeding completed successfully!
+
+📊 Database Summary:
+------------------------------------------------------------
+   users                     :  142
+   patients                  :  100
+   doctors                   :  30
+   hospital_admins           :  10
+   super_admins              :  2
+   hospitals                 :  15
+   hospital_resources        :  60
+   departments               :  105
+   tests                     :  525
+   ambulances                :  52
+   appointments              :  280
+   appointment_queue         :  160
+   doctor_slots              :  0
+   medical_documents         :  240
+   prescriptions             :  420
+   doctor_earnings           :  180
+   reviews                   :  168
+
+============================================================
+🔑 Test Login Credentials:
+------------------------------------------------------------
+   Super Admin:
+   Email    : superadmin@mediconnect.com
+   Password : password123
+
+   Note: All users have password "password123"
+============================================================
+```
+
+---
+
+## Verification
+
+verify the database is populated:
+
+```sql
+USE mediconnect;
+
+-- Check total users
+SELECT role, COUNT(*) as count FROM users GROUP BY role;
+
+-- Check hospitals
+SELECT name, city, is_approved FROM hospitals LIMIT 5;
+
+-- Check doctors
+SELECT full_name, specialization FROM doctors LIMIT 5;
+
+-- Check appointments
+SELECT COUNT(*) as total_appointments FROM appointments;
+```
+
+---
+
+## Useful Commands
+
+### Reseed Database (Clear & Repopulate)
+```bash
+npm run db:refresh
+```
+
+### Clear Database Only
+```bash
+npm run db:clear
+```
+
+### Start Backend Server
+```bash
+npm start
+# Or for development with auto-reload
+npm run dev
+```
+
+---
+
+## Test Credentials
+
+After seeding, you can login with:
+
+| Role | Email | Password |
+|------|-------|----------|
+| Super Admin | superadmin@mediconnect.com | password123 |
+| Any User | (check users table) | password123 |
+
+**All users** in the database have password: `password123`
+
+---
+
+## File Structure Created
+
+```
+backend/
+├── database/
+│   └── schema.sql              ✅ New clean schema (16 tables)
+├── scripts/
+│   ├── clearDatabase.js        ✅ Database clearing utility
+│   └── seeders/
+│       ├── masterSeed.js       ✅ Main seeder runner
+│       ├── seedUsers.js        ✅ Users for all 4 roles
+│       ├── seedPatients.js     ✅ Patient profiles
+│       ├── seedHospitals.js    ✅ Hospitals + resources + tests
+│       ├── seedDoctors.js      ✅ Doctor profiles
+│       ├── seedAppointments.js ✅ Appointments + queue + earnings
+│       ├── seedMedicalRecords.js ✅ Documents + prescriptions
+│       └── seedReviews.js      ✅ Patient reviews
+└── package.json                ✅ Updated with Faker.js dependency
+```
+
+---
+
+## Troubleshooting
+
+### Error: "Cannot connect to MySQL"
+- Check MySQL is running: `mysql --version`
+- Verify credentials in [.env](file:///c:/Users/omorf/MediConnectBD/MediConnect-BD3.0/.env) file
+- Check DB_PORT (usually 3306)
+
+### Error: "Table already exists"
+- Run: `npm run db:clear` first
+- Or drop database: `DROP DATABASE mediconnect; CREATE DATABASE mediconnect;`
+
+### Error: "Module not found: @faker-js/faker"
+- Run: `npm install` in backend directory
+
+### Want different data volumes?
+Edit [backend/scripts/seeders/masterSeed.js](file:///c:/Users/omorf/MediConnectBD/MediConnect-BD3.0/backend/scripts/seeders/masterSeed.js):
+```javascript
+// Change these numbers:
+await seedUsers({ patients: 50, doctors: 15, admins: 5, superAdmins: 2 });
+const hospitalIds = await seedHospitals(10);
+```
+
+---
+
+## Next Steps
+
+1. Start the backend server: `npm start`
+2. Test API endpoints: `http://localhost:5000/api/health`
+3. Start frontend: `cd .. && npm run dev`
+4. Login with super admin credentials
+
+---
+
+✅ **Your database is now ready with realistic, professional test data!**

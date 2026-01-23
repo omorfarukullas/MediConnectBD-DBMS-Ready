@@ -5,14 +5,12 @@ import { Button } from '../components/UIComponents';
 
 interface Slot {
     id: number;
-    slot_date: string;
-    slot_start_time: string;
-    slot_end_time: string;
-    appointment_type: 'telemedicine' | 'physical';
-    max_appointments: number;
-    current_bookings: number;
-    available_spots: number;
-    is_active: boolean;
+    day_of_week: string;
+    start_time: string;
+    end_time: string;
+    consultation_type: 'TELEMEDICINE' | 'PHYSICAL' | 'BOTH';
+    max_patients: number;
+    is_active: number;
 }
 
 const SlotManagement: React.FC = () => {
@@ -21,18 +19,26 @@ const SlotManagement: React.FC = () => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [message, setMessage] = useState<{ type: string; text: string }>({ type: '', text: '' });
 
-    // Form state for adding/editing slots
+    // Simplified form state - direct day selection
     const [formData, setFormData] = useState({
-        slotDate: '',
+        dayOfWeek: 'SATURDAY' as 'SATURDAY' | 'SUNDAY' | 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY',
         slotStartTime: '',
         slotEndTime: '',
         appointmentType: 'physical' as 'telemedicine' | 'physical',
-        maxAppointments: 10,
-        recurring: false,
-        endDate: ''
+        maxAppointments: 40
     });
 
     const [filter, setFilter] = useState<'all' | 'telemedicine' | 'physical'>('all');
+
+    const daysOfWeek = [
+        { value: 'SATURDAY', label: 'Saturday', emoji: '🌅' },
+        { value: 'SUNDAY', label: 'Sunday', emoji: '☀️' },
+        { value: 'MONDAY', label: 'Monday', emoji: '📅' },
+        { value: 'TUESDAY', label: 'Tuesday', emoji: '📆' },
+        { value: 'WEDNESDAY', label: 'Wednesday', emoji: '📋' },
+        { value: 'THURSDAY', label: 'Thursday', emoji: '📊' },
+        { value: 'FRIDAY', label: 'Friday', emoji: '🎉' }
+    ];
 
     useEffect(() => {
         fetchSlots();
@@ -40,7 +46,7 @@ const SlotManagement: React.FC = () => {
 
     const fetchSlots = async () => {
         try {
-            const response = await api.get<{ success: boolean; slots: Slot[] }>('/slots/my-slots?upcoming=true');
+            const response = await api.get<{ success: boolean; slots: Slot[] }>('/slots/my-slots');
             if (response.data.success) {
                 setSlots(response.data.slots);
             }
@@ -54,20 +60,20 @@ const SlotManagement: React.FC = () => {
 
     const handleCreateSlot = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        // Format times to HH:mm:ss for database compatibility
+
         const payload = {
-            ...formData,
-            slotStartTime: formatTimeForDB(formData.slotStartTime),
-            slotEndTime: formatTimeForDB(formData.slotEndTime)
+            dayOfWeek: formData.dayOfWeek,
+            startTime: formatTimeForDB(formData.slotStartTime),
+            endTime: formatTimeForDB(formData.slotEndTime),
+            consultationType: formData.appointmentType.toUpperCase(),
+            maxPatients: formData.maxAppointments,
         };
-        
-        console.log('📤 Creating slot with data:', payload);
-        
+
+        console.log('📤 Creating weekly slot rule:', payload);
+
         try {
             const response = await api.post('/slots', payload);
-            console.log('📥 Response:', response.data);
-            
+
             if (response.data.success) {
                 showMessage('success', `✅ ${response.data.message}`);
                 setShowAddModal(false);
@@ -76,12 +82,11 @@ const SlotManagement: React.FC = () => {
             }
         } catch (error: any) {
             console.error('❌ Error creating slot:', error);
-            console.error('❌ Error response:', error.response?.data);
             showMessage('error', error.response?.data?.message || 'Failed to create slot');
         }
     };
 
-    const handleToggleSlot = async (id: number, currentStatus: boolean) => {
+    const handleToggleSlot = async (id: number, currentStatus: number) => {
         try {
             await api.put(`/slots/${id}`, { isActive: !currentStatus });
             showMessage('success', `Slot ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
@@ -93,11 +98,11 @@ const SlotManagement: React.FC = () => {
     };
 
     const handleDeleteSlot = async (id: number) => {
-        if (!confirm('Are you sure you want to delete this slot?')) return;
+        if (!confirm('Are you sure you want to delete this weekly slot rule?')) return;
 
         try {
             await api.delete(`/slots/${id}`);
-            showMessage('success', 'Slot deleted successfully');
+            showMessage('success', 'Slot rule deleted successfully');
             fetchSlots();
         } catch (error: any) {
             console.error('Error deleting slot:', error);
@@ -112,27 +117,16 @@ const SlotManagement: React.FC = () => {
 
     const resetForm = () => {
         setFormData({
-            slotDate: '',
+            dayOfWeek: 'SATURDAY',
             slotStartTime: '',
             slotEndTime: '',
             appointmentType: 'physical',
-            maxAppointments: 10,
-            recurring: false,
-            endDate: ''
-        });
-    };
-
-    const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('en-US', { 
-            weekday: 'short', 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric' 
+            maxAppointments: 40
         });
     };
 
     const formatTime = (timeStr: string) => {
+        if (!timeStr) return '';
         const [hours, minutes] = timeStr.split(':');
         const hour = parseInt(hours);
         const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -140,29 +134,24 @@ const SlotManagement: React.FC = () => {
         return `${displayHour}:${minutes} ${ampm}`;
     };
 
-    const getTodayDate = () => {
-        return new Date().toISOString().split('T')[0];
-    };
-
     const formatTimeForDB = (timeStr: string) => {
-        // Convert HH:mm to HH:mm:ss format for database
-        if (timeStr && timeStr.length === 5) {
-            return timeStr + ':00';
-        }
+        if (timeStr && timeStr.length === 5) return timeStr + ':00';
         return timeStr;
     };
 
     const filteredSlots = slots.filter(slot => {
         if (filter === 'all') return true;
-        return slot.appointment_type === filter;
+        return slot.consultation_type === filter.toUpperCase() || slot.consultation_type === 'BOTH';
     });
 
     const groupedSlots = filteredSlots.reduce((acc, slot) => {
-        const date = slot.slot_date.split('T')[0];
-        if (!acc[date]) acc[date] = [];
-        acc[date].push(slot);
+        const day = slot.day_of_week;
+        if (!acc[day]) acc[day] = [];
+        acc[day].push(slot);
         return acc;
     }, {} as Record<string, Slot[]>);
+
+    const dayOrder = ['SATURDAY', 'SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
 
     if (loading) {
         return (
@@ -177,8 +166,8 @@ const SlotManagement: React.FC = () => {
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h2 className="text-3xl font-bold text-gray-800">Appointment Slots</h2>
-                    <p className="text-gray-600 mt-1">Manage your availability for patient appointments</p>
+                    <h2 className="text-3xl font-bold text-gray-800">Weekly Availability Schedule</h2>
+                    <p className="text-gray-600 mt-1">Manage your recurring weekly availability rules</p>
                 </div>
                 <div className="flex gap-3">
                     <Button
@@ -188,9 +177,7 @@ const SlotManagement: React.FC = () => {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-lg flex items-center gap-2"
                     >
-                        <User size={20} />
-                        <Plus size={18} />
-                        Physical Slot
+                        <User size={20} /> <Plus size={18} /> Add Physical Slot
                     </Button>
                     <Button
                         onClick={() => {
@@ -199,110 +186,62 @@ const SlotManagement: React.FC = () => {
                         }}
                         className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-lg flex items-center gap-2"
                     >
-                        <Video size={20} />
-                        <Plus size={18} />
-                        Telemedicine Slot
+                        <Video size={20} /> <Plus size={18} /> Add Telemed Slot
                     </Button>
                 </div>
             </div>
 
             {/* Message Display */}
             {message.text && (
-                <div className={`mb-4 p-4 rounded-lg ${
-                    message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 
-                    'bg-red-50 text-red-800 border border-red-200'
-                }`}>
+                <div className={`mb-4 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
+                        'bg-red-50 text-red-800 border border-red-200'
+                    }`}>
                     {message.text}
                 </div>
             )}
 
-            {/* Filter Tabs */}
-            <div className="flex gap-2 mb-6">
-                <button
-                    onClick={() => setFilter('all')}
-                    className={`px-4 py-2 rounded-lg font-medium ${
-                        filter === 'all' 
-                            ? 'bg-blue-600 text-white' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                >
-                    All Slots ({slots.length})
-                </button>
-                <button
-                    onClick={() => setFilter('physical')}
-                    className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
-                        filter === 'physical' 
-                            ? 'bg-blue-600 text-white' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                >
-                    <User size={16} />
-                    Physical ({slots.filter(s => s.appointment_type === 'physical').length})
-                </button>
-                <button
-                    onClick={() => setFilter('telemedicine')}
-                    className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
-                        filter === 'telemedicine' 
-                            ? 'bg-blue-600 text-white' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                >
-                    <Video size={16} />
-                    Telemedicine ({slots.filter(s => s.appointment_type === 'telemedicine').length})
-                </button>
-            </div>
-
-            {/* Slots List */}
+            {/* Slots List Grouped by Day */}
             <div className="space-y-6">
                 {Object.keys(groupedSlots).length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-lg">
                         <Calendar size={48} className="mx-auto text-gray-400 mb-3" />
-                        <h3 className="text-xl font-semibold text-gray-700 mb-2">No slots available</h3>
-                        <p className="text-gray-500">Click "Add Slot" to create your first appointment slot</p>
+                        <h3 className="text-xl font-semibold text-gray-700 mb-2">No weekly schedule set</h3>
+                        <p className="text-gray-500">Create recurring availability rules to start accepting appointments</p>
                     </div>
                 ) : (
-                    Object.entries(groupedSlots).map(([date, dateSlots]) => (
-                        <div key={date} className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    dayOrder.filter(day => groupedSlots[day]).map(day => (
+                        <div key={day} className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
                             <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                                 <Calendar size={20} className="text-blue-600" />
-                                {formatDate(date)}
+                                <span className="capitalize">Every {day.toLowerCase()}</span>
+                                <span className="text-sm font-normal text-gray-500 ml-2">(Recurring Weekly)</span>
                             </h3>
                             <div className="space-y-3">
-                                {dateSlots.map(slot => (
-                                    <div 
-                                        key={slot.id} 
-                                        className={`flex items-center justify-between p-4 rounded-lg border-2 ${
-                                            slot.is_active 
-                                                ? 'border-blue-200 bg-blue-50' 
+                                {groupedSlots[day].map(slot => (
+                                    <div
+                                        key={slot.id}
+                                        className={`flex items-center justify-between p-4 rounded-lg border-2 ${slot.is_active
+                                                ? 'border-blue-200 bg-blue-50'
                                                 : 'border-gray-200 bg-gray-50 opacity-60'
-                                        }`}
+                                            }`}
                                     >
                                         <div className="flex items-center gap-4 flex-1">
-                                            {/* Type Icon */}
-                                            <div className={`p-3 rounded-full ${
-                                                slot.appointment_type === 'telemedicine' 
-                                                    ? 'bg-purple-100 text-purple-600' 
-                                                    : 'bg-green-100 text-green-600'
-                                            }`}>
-                                                {slot.appointment_type === 'telemedicine' ? (
-                                                    <Video size={20} />
-                                                ) : (
-                                                    <User size={20} />
-                                                )}
+                                            <div className={`p-3 rounded-full ${slot.consultation_type === 'TELEMEDICINE'
+                                                    ? 'bg-purple-100 text-purple-600'
+                                                    : slot.consultation_type === 'BOTH'
+                                                        ? 'bg-indigo-100 text-indigo-600'
+                                                        : 'bg-green-100 text-green-600'
+                                                }`}>
+                                                {slot.consultation_type === 'TELEMEDICINE' ? <Video size={20} /> : <User size={20} />}
                                             </div>
 
-                                            {/* Slot Info */}
                                             <div className="flex-1">
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-lg font-semibold text-gray-800">
-                                                        {formatTime(slot.slot_start_time)} - {formatTime(slot.slot_end_time)}
+                                                        {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                                     </span>
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                                        slot.appointment_type === 'telemedicine'
-                                                            ? 'bg-purple-100 text-purple-700'
-                                                            : 'bg-green-100 text-green-700'
-                                                    }`}>
-                                                        {slot.appointment_type === 'telemedicine' ? 'Telemedicine' : 'Physical'}
+                                                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-white border border-gray-200 text-gray-600">
+                                                        Max {slot.max_patients} Patients
                                                     </span>
                                                     {!slot.is_active && (
                                                         <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
@@ -310,42 +249,30 @@ const SlotManagement: React.FC = () => {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="mt-2 flex items-center gap-4 text-sm">
-                                                    <span className="text-gray-600">
-                                                        <span className="font-medium text-blue-600">{slot.current_bookings}</span>
-                                                        /{slot.max_appointments} booked
-                                                    </span>
-                                                    <span className={`font-medium ${
-                                                        slot.available_spots > 0 ? 'text-green-600' : 'text-red-600'
-                                                    }`}>
-                                                        {slot.available_spots} spots available
-                                                    </span>
+                                                <div className="text-sm text-gray-500 mt-1 capitalize">
+                                                    {slot.consultation_type.toLowerCase()} appointments
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Actions */}
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => handleToggleSlot(slot.id, slot.is_active)}
-                                                className={`p-2 rounded-lg ${
-                                                    slot.is_active 
-                                                        ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' 
+                                                className={`p-2 rounded-lg ${slot.is_active
+                                                        ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200'
                                                         : 'bg-green-100 text-green-600 hover:bg-green-200'
-                                                }`}
+                                                    }`}
                                                 title={slot.is_active ? 'Deactivate' : 'Activate'}
                                             >
                                                 {slot.is_active ? <X size={18} /> : <Check size={18} />}
                                             </button>
-                                            {slot.current_bookings === 0 && (
-                                                <button
-                                                    onClick={() => handleDeleteSlot(slot.id)}
-                                                    className="p-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={() => handleDeleteSlot(slot.id)}
+                                                className="p-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
+                                                title="Delete Weekly Rule"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -360,7 +287,7 @@ const SlotManagement: React.FC = () => {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
                         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-                            <h3 className="text-xl font-bold text-gray-800">Create Appointment Slot</h3>
+                            <h3 className="text-xl font-bold text-gray-800">Create Weekly Availability</h3>
                             <button
                                 onClick={() => { setShowAddModal(false); resetForm(); }}
                                 className="text-gray-400 hover:text-gray-600"
@@ -371,17 +298,16 @@ const SlotManagement: React.FC = () => {
 
                         <form onSubmit={handleCreateSlot} className="p-6 space-y-4">
                             {/* Appointment Type Display */}
-                            <div className={`p-4 rounded-lg border-2 ${
-                                formData.appointmentType === 'telemedicine'
+                            <div className={`p-4 rounded-lg border-2 ${formData.appointmentType === 'telemedicine'
                                     ? 'border-purple-300 bg-purple-50'
                                     : 'border-green-300 bg-green-50'
-                            }`}>
+                                }`}>
                                 <div className="flex items-center gap-3">
                                     {formData.appointmentType === 'telemedicine' ? (
                                         <>
                                             <Video size={24} className="text-purple-600" />
                                             <div>
-                                                <span className="font-semibold text-purple-900">Telemedicine Appointment</span>
+                                                <span className="font-semibold text-purple-900">Telemedicine Session</span>
                                                 <p className="text-sm text-purple-700">Video consultation slot</p>
                                             </div>
                                         </>
@@ -389,7 +315,7 @@ const SlotManagement: React.FC = () => {
                                         <>
                                             <User size={24} className="text-green-600" />
                                             <div>
-                                                <span className="font-semibold text-green-900">Physical Appointment</span>
+                                                <span className="font-semibold text-green-900">Physical Visit Session</span>
                                                 <p className="text-sm text-green-700">In-person consultation slot</p>
                                             </div>
                                         </>
@@ -397,19 +323,30 @@ const SlotManagement: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Date */}
+                            {/* Day of Week Selection */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Start Date *
+                                    Day of Week *
                                 </label>
-                                <input
-                                    type="date"
-                                    min={getTodayDate()}
-                                    value={formData.slotDate}
-                                    onChange={(e) => setFormData({ ...formData, slotDate: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                <select
+                                    value={formData.dayOfWeek}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        dayOfWeek: e.target.value as typeof formData.dayOfWeek
+                                    })}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
                                     required
-                                />
+                                >
+                                    {daysOfWeek.map(day => (
+                                        <option key={day.value} value={day.value}>
+                                            {day.emoji} {day.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-blue-600 mt-2 flex items-center gap-1">
+                                    <span>ℹ️</span>
+                                    <span>This slot will repeat every {daysOfWeek.find(d => d.value === formData.dayOfWeek)?.label}</span>
+                                </p>
                             </div>
 
                             {/* Time Range */}
@@ -440,52 +377,33 @@ const SlotManagement: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Max Appointments */}
+                            {/* Max Patients */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Maximum Appointments
+                                    Maximum Patients per Session
                                 </label>
                                 <input
                                     type="number"
                                     min="1"
-                                    max="50"
+                                    max="100"
                                     value={formData.maxAppointments}
                                     onChange={(e) => setFormData({ ...formData, maxAppointments: parseInt(e.target.value) })}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">How many patients can book this slot</p>
+                                <p className="text-xs text-gray-500 mt-1">Queue capacity for each session</p>
                             </div>
 
-                            {/* Recurring */}
+                            {/* Info Box */}
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                <label className="flex items-center gap-3 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.recurring}
-                                        onChange={(e) => setFormData({ ...formData, recurring: e.target.checked })}
-                                        className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                                    />
-                                    <div>
-                                        <span className="font-medium text-gray-800">Make this recurring</span>
-                                        <p className="text-xs text-gray-600">Create this slot for every week on the same day</p>
-                                    </div>
-                                </label>
-
-                                {formData.recurring && (
-                                    <div className="mt-3">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Repeat Until
-                                        </label>
-                                        <input
-                                            type="date"
-                                            min={formData.slotDate || getTodayDate()}
-                                            value={formData.endDate}
-                                            onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                            required={formData.recurring}
-                                        />
-                                    </div>
-                                )}
+                                <p className="text-sm text-blue-800">
+                                    <span className="font-semibold">Recurring Rule:</span> This will create appointments every{' '}
+                                    <span className="font-semibold">{daysOfWeek.find(d => d.value === formData.dayOfWeek)?.label}</span>{' '}
+                                    from{' '}
+                                    <span className="font-semibold">{formData.slotStartTime || '__:__'}</span>{' '}
+                                    to{' '}
+                                    <span className="font-semibold">{formData.slotEndTime || '__:__'}</span>.
+                                    Patients will be able to book appointments on upcoming {daysOfWeek.find(d => d.value === formData.dayOfWeek)?.label}s.
+                                </p>
                             </div>
 
                             {/* Actions */}
@@ -499,9 +417,9 @@ const SlotManagement: React.FC = () => {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                                 >
-                                    Create Slot
+                                    Create Weekly Rule
                                 </button>
                             </div>
                         </form>

@@ -1,10 +1,10 @@
 const express = require('express');
-const { registerDoctor, authDoctor, getDoctors, getDoctorById } = require('../controllers/doctorController');
+const { authDoctor, getDoctors, getDoctorById } = require('../controllers/doctorController');
 
 const router = express.Router();
 
-// Doctor Registration (Public)
-router.post('/register', registerDoctor);
+// NOTE: Doctor registration has been moved to /api/auth/register/doctor
+// This route uses the new schema with proper users + doctors table structure
 
 // Doctor Login (Public)
 router.post('/login', authDoctor);

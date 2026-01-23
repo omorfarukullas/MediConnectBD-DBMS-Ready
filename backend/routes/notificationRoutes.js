@@ -6,7 +6,7 @@ const {
     deleteNotification,
     createNotification
 } = require('../controllers/notificationController');
-const { protect, adminOnly } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -16,7 +16,7 @@ router.put('/read-all', protect, markAllAsRead);
 router.put('/:id/read', protect, markAsRead);
 router.delete('/:id', protect, deleteNotification);
 
-// Admin only
-router.post('/', protect, adminOnly, createNotification);
+// Admin only - allow both SUPER_ADMIN and HOSPITAL_ADMIN
+router.post('/', protect, authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN'), createNotification);
 
 module.exports = router;
