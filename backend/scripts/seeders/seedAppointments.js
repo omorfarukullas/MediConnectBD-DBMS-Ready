@@ -35,16 +35,16 @@ async function seedAppointments() {
 
     console.log(`   Fetched ${patients.length} patients and ${doctors.length} doctors. Generating appointments...`);
 
-    // Generate appointments with realistic distribution
-    // IMPORTANT: Reduced from 1-4 to 0-2 to ensure slots don't always show full
-    // This creates varied availability: some empty, some partial, rarely full
+    const today = new Date();
+
+    // Generate appointments - EVERY patient gets 1-3 appointments
     for (const patient of patients) {
-        // Each patient gets 0-2 appointments (weighted towards 1)
+        // Each patient gets 1-3 appointments (guaranteed at least 1)
         const rand = Math.random();
         let numAppointments;
-        if (rand < 0.2) numAppointments = 0;  // 20% no appointments
-        else if (rand < 0.7) numAppointments = 1;  // 50% one appointment
-        else numAppointments = 2;  // 30% two appointments
+        if (rand < 0.4) numAppointments = 1;  // 40% get 1 appointment
+        else if (rand < 0.8) numAppointments = 2;  // 40% get 2 appointments
+        else numAppointments = 3;  // 20% get 3 appointments
 
         for (let i = 0; i < numAppointments; i++) {
             const doctor = faker.helpers.arrayElement(doctors);
@@ -59,6 +59,15 @@ async function seedAppointments() {
             let appointmentDate = null;
             let attempts = 0;
 
+            // 40% chance to create appointment for TODAY (for queue testing)
+            if (Math.random() < 0.4) {
+                const todayDayName = days[today.getDay()];
+                if (slot.day_of_week === todayDayName) {
+                    appointmentDate = today;
+                }
+            }
+
+            // If not today, find a random date matching the slot
             while (!appointmentDate && attempts < 10) {
                 const randomDate = faker.date.between({
                     from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
@@ -104,16 +113,30 @@ async function seedAppointments() {
 
             appointmentIds.push(result.insertId);
 
-            // Create queue entry if appointment is in progress or completed
-            if (status === 'IN_PROGRESS' || status === 'COMPLETED') {
-                const queueStatus = status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS';
-                const queueNumber = faker.number.int({ min: 1, max: 50 });
+            // Create queue entry for today's appointments (for queue tracking)
+            if (appointmentDate.toISOString().split('T')[0] === today.toISOString().split('T')[0]) {
+                let queueStatus = 'WAITING'; // Default for PENDING/CONFIRMED
+                let queueNumber = faker.number.int({ min: 1, max: 20 });
+                let called_at = null;
+                let queue_started_at = null;
+                let queue_completed_at = null;
+
+                if (status === 'IN_PROGRESS') {
+                    queueStatus = 'IN_PROGRESS';
+                    called_at = started_at;
+                    queue_started_at = started_at;
+                } else if (status === 'COMPLETED') {
+                    queueStatus = 'COMPLETED';
+                    called_at = started_at;
+                    queue_started_at = started_at;
+                    queue_completed_at = completed_at;
+                }
 
                 await pool.execute(
                     `INSERT INTO appointment_queue (appointment_id, doctor_id, patient_id, queue_number, queue_date, status, called_at, started_at, completed_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [result.insertId, doctor.id, patient.id, queueNumber, appointmentDate.toISOString().split('T')[0],
-                        queueStatus, started_at, started_at, completed_at]
+                        queueStatus, called_at, queue_started_at, queue_completed_at]
                 );
             }
 

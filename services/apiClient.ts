@@ -293,7 +293,7 @@ class ApiService {
     return this.http.post('/reviews', data);
   }
 
-  async getDoctorReviews(doctorId: number) {
+  async getDoctorReviews(doctorId: number): Promise<{ count: number; reviews: any[] }> {
     return this.http.get(`/reviews/doctor/${doctorId}`);
   }
 

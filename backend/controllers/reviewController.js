@@ -75,9 +75,11 @@ const getDoctorReviews = async (req, res) => {
 
         const [reviews] = await pool.execute(
             `SELECT r.id, r.patient_id, r.doctor_id, r.rating, r.comment, r.appointment_id, r.is_verified, r.created_at, r.updated_at,
-                    p.full_name as patient_name, p.email as patient_email
+                    p.full_name as patient_name, p.phone,
+                    u.email as patient_email
              FROM reviews r
              LEFT JOIN patients p ON r.patient_id = p.id
+             LEFT JOIN users u ON p.user_id = u.id
              WHERE r.doctor_id = ?
              ORDER BY r.created_at DESC`,
             [doctorId]
@@ -96,7 +98,8 @@ const getDoctorReviews = async (req, res) => {
             patient: {
                 id: r.patient_id,
                 name: r.patient_name,
-                email: r.patient_email
+                email: r.patient_email,
+                phone: r.phone
             }
         }));
 
@@ -119,9 +122,11 @@ const getMyReviews = async (req, res) => {
     try {
         const [reviews] = await pool.execute(
             `SELECT r.id, r.patient_id, r.doctor_id, r.rating, r.comment, r.appointment_id, r.is_verified, r.created_at, r.updated_at,
-                    d.full_name as doctor_name, d.specialization, d.email as doctor_email
+                    d.full_name as doctor_name, d.specialization,
+                    u.email as doctor_email
              FROM reviews r
              LEFT JOIN doctors d ON r.doctor_id = d.id
+             LEFT JOIN users u ON d.user_id = u.id
              WHERE r.patient_id = ?
              ORDER BY r.created_at DESC`,
             [req.user.id]

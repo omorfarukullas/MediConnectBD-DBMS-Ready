@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
     Users, Clock, Calendar, Video, CheckCircle, XCircle, ArrowLeft,
@@ -12,6 +11,7 @@ import { NotificationBell } from '../components/NotificationBell';
 import { DoctorAppointmentList } from '../components/DoctorAppointmentList';
 import QueueDashboard from '../components/QueueDashboard';
 import SlotManagement from '../components/SlotManagement';
+import FeedbackView from '../components/FeedbackView';
 import { api } from '../services/apiClient';
 
 interface DoctorPortalProps {
@@ -398,8 +398,15 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                         </div>
                     )}
 
+                    {/* VIEW: FEEDBACK/REVIEWS */}
+                    {activeView === 'FEEDBACK' && (
+                        <div className="space-y-6 animate-fade-in">
+                            <FeedbackView doctorId={doctorProfile?.id} doctorProfile={doctorProfile} />
+                        </div>
+                    )}
+
                     {/* Placeholder for other views */}
-                    {(activeView === 'TELEMEDICINE' || activeView === 'RECORDS' || activeView === 'FEEDBACK') && (
+                    {(activeView === 'TELEMEDICINE' || activeView === 'RECORDS') && (
                         <div className="flex items-center justify-center h-64 text-slate-400">
                             <p>View content for {activeView} is under development.</p>
                         </div>

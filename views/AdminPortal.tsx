@@ -20,15 +20,36 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
     const [activeView, setActiveView] = useState<'DASHBOARD' | 'DOCTORS' | 'DOCTOR_SCHEDULES' | 'APPOINTMENTS' | 'QUEUE' | 'TELEMEDICINE' | 'RECORDS' | 'AMBULANCE' | 'DEPARTMENTS' | 'PROFILE' | 'FINANCIALS' | 'FEEDBACK' | 'SETTINGS'>('DASHBOARD');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-    // Hospital State (Editable)
-    const [hospital, setHospital] = useState(MOCK_HOSPITALS.find(h => h.id === currentUser.hospitalId) || MOCK_HOSPITALS[0]);
+    // Hospital State - Fetch from Database
+    const [hospital, setHospital] = useState<any>({ name: 'Loading...', id: null });
+    const [hospitalResources, setHospitalResources] = useState<any[]>([]);
+    const [isLoadingHospital, setIsLoadingHospital] = useState(true);
 
     // Doctors Management State
     const [doctors, setDoctors] = useState<Doctor[]>([]);
     const [isLoadingDoctors, setIsLoadingDoctors] = useState(true);
 
-    // Fetch doctors on mount
+    // Fetch hospital details and doctors on mount
     useEffect(() => {
+        const fetchHospitalData = async () => {
+            try {
+                // Fetch hospital details
+                setIsLoadingHospital(true);
+                const hospitalData = await api.getHospitalDetails();
+                console.log('🏥 Hospital data:', hospitalData);
+                setHospital(hospitalData);
+
+                // Fetch all resources
+                const resourcesData = await api.getHospitalResources();
+                console.log('📊 Resources data:', resourcesData);
+                setHospitalResources(resourcesData.resources || []);
+                setIsLoadingHospital(false);
+            } catch (err) {
+                console.error('❌ Error fetching hospital data:', err);
+                setIsLoadingHospital(false);
+            }
+        };
+
         const fetchDoctors = async () => {
             try {
                 setIsLoadingDoctors(true);
@@ -50,6 +71,8 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                 setIsLoadingDoctors(false);
             }
         };
+
+        fetchHospitalData();
         fetchDoctors();
     }, []);
     const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
@@ -118,30 +141,39 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
         return () => clearInterval(interval);
     }, []);
 
-    // Resource Edit State
+    // Resource Edit State - Now handles all resource types dynamically
     const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
+    const [selectedResource, setSelectedResource] = useState<any>(null);
     const [resourceForm, setResourceForm] = useState({
-        icuAvailable: hospital.icuAvailable,
-        generalBedsAvailable: hospital.generalBedsAvailable,
-        totalIcu: 20, // Mock total
-        totalGeneral: 200 // Mock total
+        available: 0,
+        total_capacity: 0
     });
 
-    const handleUpdateResources = async () => {
-        try {
-            // Note: This is simplified and would need to be adapted based on actual resource IDs
-            // For now, we're just updating local state; ideally, we'd fetch resource IDs and update each
-            console.log('📝 Updating resources via API...');
-            // TODO: Implement proper resource update with actual resource IDs from database
-            // await api.updateResource(resourceId, { available, total_capacity });
+    const handleEditResource = (resource: any) => {
+        setSelectedResource(resource);
+        setResourceForm({
+            available: resource.available,
+            total_capacity: resource.total_capacity
+        });
+        setIsResourceModalOpen(true);
+    };
 
-            setHospital(prev => ({
-                ...prev,
-                icuAvailable: parseInt(resourceForm.icuAvailable.toString()),
-                generalBedsAvailable: parseInt(resourceForm.generalBedsAvailable.toString())
-            }));
+    const handleUpdateResources = async () => {
+        if (!selectedResource) return;
+
+        try {
+            console.log('📝 Updating resource:', selectedResource.resource_type);
+            await api.updateResource(selectedResource.id, {
+                available: parseInt(resourceForm.available.toString()),
+                total_capacity: parseInt(resourceForm.total_capacity.toString())
+            });
+
+            // Refresh resources
+            const resourcesData = await api.getHospitalResources();
+            setHospitalResources(resourcesData.resources || []);
+
             setIsResourceModalOpen(false);
-            console.log('✅ Resources updated');
+            console.log('✅ Resource updated successfully');
         } catch (err) {
             console.error('❌ Error updating resources:', err);
             alert('Failed to update resources. Please try again.');
