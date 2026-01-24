@@ -18,11 +18,11 @@ const router = express.Router();
 // Get current user's prescriptions
 router.get('/', protect, getPrescriptions);
 
-// Get specific patient's prescriptions (no time restriction)
-router.get('/patient/:patientId', protect, getPatientPrescriptions);
+// Get specific patient's prescriptions (time-gated for doctors)
+router.get('/patient/:patientId', protect, validateAppointmentAccess, getPatientPrescriptions);
 
-// Create new prescription (no time restriction)
-router.post('/', protect, createPrescription);
+// Create new prescription (time-gated for doctors)
+router.post('/', protect, validateAppointmentAccess, createPrescription);
 
 // Update prescription visibility
 router.patch('/:id/visibility', protect, updatePrescriptionVisibility);

@@ -20,8 +20,12 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
     const [activeView, setActiveView] = useState<'DASHBOARD' | 'DOCTORS' | 'DOCTOR_SCHEDULES' | 'APPOINTMENTS' | 'QUEUE' | 'TELEMEDICINE' | 'RECORDS' | 'AMBULANCE' | 'DEPARTMENTS' | 'PROFILE' | 'FINANCIALS' | 'FEEDBACK' | 'SETTINGS'>('DASHBOARD');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-    // Hospital State (Editable)
-    const [hospital, setHospital] = useState(MOCK_HOSPITALS.find(h => h.id === currentUser.hospitalId) || MOCK_HOSPITALS[0]);
+    // Hospital State & Resources (Fetched from API)
+    const [hospital, setHospital] = useState<any>(null);
+    const [hospitalResources, setHospitalResources] = useState<any[]>([]);
+    const [departments, setDepartments] = useState<any[]>([]);
+    const [tests, setTests] = useState<any[]>([]);
+    const [isLoadingResources, setIsLoadingResources] = useState(false);
 
     // Doctors Management State
     const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -118,33 +122,76 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
         return () => clearInterval(interval);
     }, []);
 
+    // Fetch hospital resources on mount
+    useEffect(() => {
+        const fetchResources = async () => {
+            try {
+                setIsLoadingResources(true);
+
+                // Fetch hospital details and resources together
+                const [hospitalData, resourcesData] = await Promise.all([
+                    api.getHospitalDetails(),
+                    api.getHospitalResources()
+                ]);
+
+                console.log('✅ Fetched hospital details:', hospitalData);
+                console.log('✅ Fetched hospital resources:', resourcesData);
+
+                // @ts-ignore
+                setHospital(hospitalData);
+                // @ts-ignore
+                setHospitalResources(resourcesData.resources || []);
+                // @ts-ignore
+                setDepartments(resourcesData.departments || []);
+                // @ts-ignore
+                setTests(resourcesData.tests || []);
+                // @ts-ignore - ambulances already fetched separately
+            } catch (err) {
+                console.error('❌ Error fetching resources:', err);
+            } finally {
+                setIsLoadingResources(false);
+            }
+        };
+        fetchResources();
+    }, []);
+
     // Resource Edit State
     const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
+    const [selectedResource, setSelectedResource] = useState<any>(null);
     const [resourceForm, setResourceForm] = useState({
-        icuAvailable: hospital.icuAvailable,
-        generalBedsAvailable: hospital.generalBedsAvailable,
-        totalIcu: 20, // Mock total
-        totalGeneral: 200 // Mock total
+        available: 0,
+        total_capacity: 0
     });
+
+    const handleOpenResourceEdit = (resource: any) => {
+        setSelectedResource(resource);
+        setResourceForm({
+            available: resource.available,
+            total_capacity: resource.total_capacity
+        });
+        setIsResourceModalOpen(true);
+    };
 
     const handleUpdateResources = async () => {
         try {
-            // Note: This is simplified and would need to be adapted based on actual resource IDs
-            // For now, we're just updating local state; ideally, we'd fetch resource IDs and update each
-            console.log('📝 Updating resources via API...');
-            // TODO: Implement proper resource update with actual resource IDs from database
-            // await api.updateResource(resourceId, { available, total_capacity });
+            if (!selectedResource) return;
 
-            setHospital(prev => ({
-                ...prev,
-                icuAvailable: parseInt(resourceForm.icuAvailable.toString()),
-                generalBedsAvailable: parseInt(resourceForm.generalBedsAvailable.toString())
-            }));
+            console.log('📝 Updating resource via API...');
+            await api.updateResource(selectedResource.id, {
+                available: parseInt(resourceForm.available.toString()),
+                total_capacity: parseInt(resourceForm.total_capacity.toString())
+            });
+
+            // Refresh resources
+            const data = await api.getHospitalResources();
+            // @ts-ignore
+            setHospitalResources(data.resources || []);
+
             setIsResourceModalOpen(false);
-            console.log('✅ Resources updated');
+            console.log('✅ Resource updated successfully');
         } catch (err) {
-            console.error('❌ Error updating resources:', err);
-            alert('Failed to update resources. Please try again.');
+            console.error('❌ Error updating resource:', err);
+            alert('Failed to update resource. Please try again.');
         }
     };
 
@@ -607,7 +654,7 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                             <Building2 size={24} />
                         </div>
                         <div>
-                            <h3 className="font-bold text-slate-900 text-sm truncate w-32 font-heading">{hospital.name}</h3>
+                            <h3 className="font-bold text-slate-900 text-sm truncate w-32 font-heading">{hospital?.name || 'Loading...'}</h3>
                             <p className="text-xs text-slate-500 font-medium">Admin Portal</p>
                         </div>
                     </div>
@@ -755,66 +802,59 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                 <Card>
                                     <div className="flex justify-between items-center mb-6">
                                         <h3 className="font-bold text-lg text-slate-800 font-heading">Resource Availability</h3>
-                                        <button
-                                            onClick={() => {
-                                                setResourceForm({
-                                                    icuAvailable: hospital.icuAvailable,
-                                                    generalBedsAvailable: hospital.generalBedsAvailable,
-                                                    totalIcu: 20,
-                                                    totalGeneral: 200
-                                                });
-                                                setIsResourceModalOpen(true);
-                                            }}
-                                            className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                                            title="Update Resources"
-                                        >
-                                            <Edit3 size={18} />
-                                        </button>
                                     </div>
 
-                                    <div className="space-y-6">
-                                        <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="font-bold text-red-700 text-sm flex items-center gap-2"><Activity size={16} /> ICU Beds</span>
-                                                <span className="font-bold text-red-700 bg-white px-2 py-0.5 rounded text-xs border border-red-100 shadow-sm">{hospital.icuAvailable}/20</span>
-                                            </div>
-                                            <div className="w-full bg-red-200/50 rounded-full h-2.5">
-                                                <div
-                                                    className="bg-red-500 h-2.5 rounded-full transition-all duration-700 ease-out shadow-sm"
-                                                    style={{ width: `${((20 - hospital.icuAvailable) / 20) * 100}%` }}
-                                                ></div>
-                                            </div>
-                                            {hospital.icuAvailable < 5 && (
-                                                <p className="text-[10px] text-red-600 mt-2 font-bold flex items-center gap-1">
-                                                    <AlertCircle size={12} /> Critical Occupancy
-                                                </p>
-                                            )}
+                                    {isLoadingResources ? (
+                                        <div className="text-center py-8">
+                                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                                            <p className="mt-3 text-slate-500 text-sm">Loading resources...</p>
                                         </div>
+                                    ) : hospitalResources.length === 0 ? (
+                                        <div className="text-center py-8">
+                                            <Building2 size={48} className="mx-auto text-slate-300 mb-4" />
+                                            <p className="text-slate-500">No resources configured</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {hospitalResources.map(resource => {
+                                                const occupied = resource.total_capacity - resource.available;
+                                                const occupiedPercent = (occupied / resource.total_capacity) * 100;
+                                                const isLow = resource.available < (resource.total_capacity * 0.25);
 
-                                        <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="font-bold text-blue-700 text-sm flex items-center gap-2"><Building2 size={16} /> General Ward</span>
-                                                <span className="font-bold text-blue-700 bg-white px-2 py-0.5 rounded text-xs border border-blue-100 shadow-sm">{hospital.generalBedsAvailable}/200</span>
-                                            </div>
-                                            <div className="w-full bg-blue-200/50 rounded-full h-2.5">
-                                                <div
-                                                    className="bg-blue-500 h-2.5 rounded-full transition-all duration-700 ease-out shadow-sm"
-                                                    style={{ width: `${((200 - hospital.generalBedsAvailable) / 200) * 100}%` }}
-                                                ></div>
-                                            </div>
-                                        </div>
+                                                const color =
+                                                    resource.resource_type === 'ICU' ? { bg: 'red', text: 'red' } :
+                                                        resource.resource_type === 'CCU' ? { bg: 'orange', text: 'orange' } :
+                                                            resource.resource_type === 'CABIN' ? { bg: 'purple', text: 'purple' } :
+                                                                { bg: 'blue', text: 'blue' };
 
-                                        <div className="p-4 bg-teal-50 rounded-2xl border border-teal-100">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="font-bold text-teal-700 text-sm flex items-center gap-2"><Ambulance size={16} /> Ambulances</span>
-                                                <span className="font-bold text-teal-700 bg-white px-2 py-0.5 rounded text-xs border border-teal-100 shadow-sm">2/5</span>
-                                            </div>
-                                            <div className="w-full bg-teal-200/50 rounded-full h-2.5">
-                                                <div className="bg-teal-500 h-2.5 rounded-full shadow-sm" style={{ width: '40%' }}></div>
-                                            </div>
+                                                return (
+                                                    <div key={resource.id} className={`p-4 bg-${color.bg}-50 rounded-2xl border border-${color.bg}-100`}>
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <span className={`font-bold text-${color.text}-700 text-sm flex items-center gap-2`}>
+                                                                <Activity size={16} /> {resource.resource_type.replace('_', ' ')}
+                                                            </span>
+                                                            <span className={`font-bold text-${color.text}-700 bg-white px-2 py-0.5 rounded text-xs border border-${color.text}-100 shadow-sm`}>
+                                                                {resource.available}/{resource.total_capacity}
+                                                            </span>
+                                                        </div>
+                                                        <div className={`w-full bg-${color.bg}-200/50 rounded-full h-2.5`}>
+                                                            <div
+                                                                className={`bg-${color.bg}-500 h-2.5 rounded-full transition-all duration-700 ease-out shadow-sm`}
+                                                                style={{ width: `${occupiedPercent}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        {isLow && (
+                                                            <p className={`text-[10px] text-${color.text}-600 mt-2 font-bold flex items-center gap-1`}>
+                                                                <AlertCircle size={12} /> Low Availability
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                    </div>
+                                    )}
                                 </Card>
+
                             </div>
                         </div>
                     )}
@@ -978,640 +1018,643 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                 </div>
                             )}
                         </div>
-                    )}
+                    )
+                    }
 
                     {/* --- AMBULANCE SERVICE MANAGEMENT --- */}
-                    {activeView === 'AMBULANCE' && (
-                        <div className="space-y-6 animate-fade-in pb-10">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h3 className="text-xl font-bold text-slate-900 font-heading">Ambulance Fleet Management</h3>
-                                    <p className="text-slate-500 text-sm">Manage your hospital's ambulance fleet and track availability</p>
-                                </div>
-                                <Button onClick={handleAddAmbulanceClick} className="flex items-center gap-2">
-                                    <Plus size={18} /> Add Ambulance
-                                </Button>
-                            </div>
-
-                            {/* Ambulance Statistics */}
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <Card className="bg-white border-l-4 border-l-green-500">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">Available</p>
-                                            <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">
-                                                {ambulances.filter(a => a.status === 'AVAILABLE').length}
-                                            </h2>
-                                        </div>
-                                        <div className="p-2.5 bg-green-50 text-green-600 rounded-xl"><Ambulance size={20} /></div>
+                    {
+                        activeView === 'AMBULANCE' && (
+                            <div className="space-y-6 animate-fade-in pb-10">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-slate-900 font-heading">Ambulance Fleet Management</h3>
+                                        <p className="text-slate-500 text-sm">Manage your hospital's ambulance fleet and track availability</p>
                                     </div>
-                                </Card>
-                                <Card className="bg-white border-l-4 border-l-yellow-500">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">On Duty</p>
-                                            <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">
-                                                {ambulances.filter(a => a.status === 'BUSY').length}
-                                            </h2>
-                                        </div>
-                                        <div className="p-2.5 bg-yellow-50 text-yellow-600 rounded-xl"><Activity size={20} /></div>
-                                    </div>
-                                </Card>
-                                <Card className="bg-white border-l-4 border-l-red-500">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">Maintenance</p>
-                                            <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">
-                                                {ambulances.filter(a => a.status === 'MAINTENANCE').length}
-                                            </h2>
-                                        </div>
-                                        <div className="p-2.5 bg-red-50 text-red-600 rounded-xl"><AlertCircle size={20} /></div>
-                                    </div>
-                                </Card>
-                                <Card className="bg-white border-l-4 border-l-blue-500">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">Total Fleet</p>
-                                            <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">{ambulances.length}</h2>
-                                        </div>
-                                        <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><Building2 size={20} /></div>
-                                    </div>
-                                </Card>
-                            </div>
-
-                            {/* Ambulance List */}
-                            {isLoadingAmbulances ? (
-                                <Card className="p-12 text-center">
-                                    <div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full mx-auto"></div>
-                                    <p className="text-slate-500 mt-4">Loading ambulances...</p>
-                                </Card>
-                            ) : ambulances.length === 0 ? (
-                                <Card className="p-12 text-center">
-                                    <Ambulance size={48} className="mx-auto text-slate-300 mb-4" />
-                                    <h3 className="text-lg font-bold text-slate-900 mb-2">No Ambulances Added Yet</h3>
-                                    <p className="text-slate-500 mb-4">Start by adding your first ambulance to the fleet</p>
-                                    <Button onClick={handleAddAmbulanceClick}>
-                                        <Plus size={18} className="mr-2" /> Add First Ambulance
+                                    <Button onClick={handleAddAmbulanceClick} className="flex items-center gap-2">
+                                        <Plus size={18} /> Add Ambulance
                                     </Button>
-                                </Card>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {ambulances.map(ambulance => (
-                                        <Card key={ambulance.id} className="hover:shadow-lg transition-shadow">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${ambulance.status === 'AVAILABLE' ? 'bg-green-50 text-green-600' :
-                                                        ambulance.status === 'BUSY' ? 'bg-yellow-50 text-yellow-600' :
-                                                            'bg-red-50 text-red-600'
-                                                        }`}>
-                                                        <Ambulance size={24} />
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-bold text-slate-900 font-heading">{ambulance.vehicle_number}</h4>
-                                                        <Badge color={
-                                                            ambulance.ambulance_type === 'ICU' ? 'red' :
-                                                                ambulance.ambulance_type === 'ADVANCED' ? 'blue' : 'gray'
-                                                        }>
-                                                            {ambulance.ambulance_type}
-                                                        </Badge>
-                                                    </div>
-                                                </div>
-                                                <Badge color={
-                                                    ambulance.status === 'AVAILABLE' ? 'green' :
-                                                        ambulance.status === 'BUSY' ? 'yellow' : 'red'
-                                                }>
-                                                    {ambulance.status}
-                                                </Badge>
-                                            </div>
-
-                                            <div className="space-y-2 text-sm border-t border-slate-100 pt-4">
-                                                <div className="flex justify-between">
-                                                    <span className="text-slate-500">Driver</span>
-                                                    <span className="font-bold text-slate-900">{ambulance.driver_name || 'Not assigned'}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-slate-500">Contact</span>
-                                                    <span className="font-bold text-slate-900">{ambulance.driver_phone || 'N/A'}</span>
-                                                </div>
-                                                {ambulance.current_location && (
-                                                    <div className="flex items-center gap-2 text-slate-600 mt-2">
-                                                        <MapPin size={14} />
-                                                        <span className="text-xs">{ambulance.current_location}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
-                                                <Button
-                                                    variant="outline"
-                                                    className="flex-1"
-                                                    onClick={() => handleEditAmbulanceClick(ambulance)}
-                                                >
-                                                    <Edit3 size={16} className="mr-2" /> Edit
-                                                </Button>
-                                                <Button
-                                                    variant="danger"
-                                                    onClick={() => handleDeleteAmbulance(ambulance.id)}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </Button>
-                                            </div>
-                                        </Card>
-                                    ))}
                                 </div>
-                            )}
-                        </div>
-                    )}
+
+                                {/* Ambulance Statistics */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <Card className="bg-white border-l-4 border-l-green-500">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">Available</p>
+                                                <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">
+                                                    {ambulances.filter(a => a.status === 'AVAILABLE').length}
+                                                </h2>
+                                            </div>
+                                            <div className="p-2.5 bg-green-50 text-green-600 rounded-xl"><Ambulance size={20} /></div>
+                                        </div>
+                                    </Card>
+                                    <Card className="bg-white border-l-4 border-l-yellow-500">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">On Duty</p>
+                                                <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">
+                                                    {ambulances.filter(a => a.status === 'BUSY').length}
+                                                </h2>
+                                            </div>
+                                            <div className="p-2.5 bg-yellow-50 text-yellow-600 rounded-xl"><Activity size={20} /></div>
+                                        </div>
+                                    </Card>
+                                    <Card className="bg-white border-l-4 border-l-red-500">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">Maintenance</p>
+                                                <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">
+                                                    {ambulances.filter(a => a.status === 'MAINTENANCE').length}
+                                                </h2>
+                                            </div>
+                                            <div className="p-2.5 bg-red-50 text-red-600 rounded-xl"><AlertCircle size={20} /></div>
+                                        </div>
+                                    </Card>
+                                    <Card className="bg-white border-l-4 border-l-blue-500">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">Total Fleet</p>
+                                                <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">{ambulances.length}</h2>
+                                            </div>
+                                            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><Building2 size={20} /></div>
+                                        </div>
+                                    </Card>
+                                </div>
+
+                                {/* Ambulance List */}
+                                {isLoadingAmbulances ? (
+                                    <Card className="p-12 text-center">
+                                        <div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full mx-auto"></div>
+                                        <p className="text-slate-500 mt-4">Loading ambulances...</p>
+                                    </Card>
+                                ) : ambulances.length === 0 ? (
+                                    <Card className="p-12 text-center">
+                                        <Ambulance size={48} className="mx-auto text-slate-300 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-900 mb-2">No Ambulances Added Yet</h3>
+                                        <p className="text-slate-500 mb-4">Start by adding your first ambulance to the fleet</p>
+                                        <Button onClick={handleAddAmbulanceClick}>
+                                            <Plus size={18} className="mr-2" /> Add First Ambulance
+                                        </Button>
+                                    </Card>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {ambulances.map(ambulance => (
+                                            <Card key={ambulance.id} className="hover:shadow-lg transition-shadow">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${ambulance.status === 'AVAILABLE' ? 'bg-green-50 text-green-600' :
+                                                            ambulance.status === 'BUSY' ? 'bg-yellow-50 text-yellow-600' :
+                                                                'bg-red-50 text-red-600'
+                                                            }`}>
+                                                            <Ambulance size={24} />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-bold text-slate-900 font-heading">{ambulance.vehicle_number}</h4>
+                                                            <Badge color={
+                                                                ambulance.ambulance_type === 'ICU' ? 'red' :
+                                                                    ambulance.ambulance_type === 'ADVANCED' ? 'blue' : 'gray'
+                                                            }>
+                                                                {ambulance.ambulance_type}
+                                                            </Badge>
+                                                        </div>
+                                                    </div>
+                                                    <Badge color={
+                                                        ambulance.status === 'AVAILABLE' ? 'green' :
+                                                            ambulance.status === 'BUSY' ? 'yellow' : 'red'
+                                                    }>
+                                                        {ambulance.status}
+                                                    </Badge>
+                                                </div>
+
+                                                <div className="space-y-2 text-sm border-t border-slate-100 pt-4">
+                                                    <div className="flex justify-between">
+                                                        <span className="text-slate-500">Driver</span>
+                                                        <span className="font-bold text-slate-900">{ambulance.driver_name || 'Not assigned'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-slate-500">Contact</span>
+                                                        <span className="font-bold text-slate-900">{ambulance.driver_phone || 'N/A'}</span>
+                                                    </div>
+                                                    {ambulance.current_location && (
+                                                        <div className="flex items-center gap-2 text-slate-600 mt-2">
+                                                            <MapPin size={14} />
+                                                            <span className="text-xs">{ambulance.current_location}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
+                                                    <Button
+                                                        variant="outline"
+                                                        className="flex-1"
+                                                        onClick={() => handleEditAmbulanceClick(ambulance)}
+                                                    >
+                                                        <Edit3 size={16} className="mr-2" /> Edit
+                                                    </Button>
+                                                    <Button
+                                                        variant="danger"
+                                                        onClick={() => handleDeleteAmbulance(ambulance.id)}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </Button>
+                                                </div>
+                                            </Card>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    }
 
                     {/* --- DOCTORS MANAGEMENT --- */}
-                    {activeView === 'DOCTORS' && (
-                        <div className="space-y-6 animate-fade-in pb-10">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h3 className="text-xl font-bold text-slate-900 font-heading">Doctors Management</h3>
-                                    <p className="text-slate-500 text-sm">Add, edit availability, and manage your hospital's doctors</p>
-                                </div>
-                                <Button onClick={handleAddDoctorClick} className="flex items-center gap-2">
-                                    <UserPlus size={18} /> Add New Doctor
-                                </Button>
-                            </div>
-
-                            {isLoadingDoctors ? (
-                                <div className="text-center py-12">
-                                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                    <p className="mt-3 text-slate-500">Loading doctors...</p>
-                                </div>
-                            ) : doctors.length === 0 ? (
-                                <Card className="text-center py-12">
-                                    <Users size={48} className="mx-auto text-slate-300 mb-4" />
-                                    <p className="text-slate-500 mb-4">No doctors found for this hospital</p>
-                                    <Button onClick={handleAddDoctorClick}>
-                                        <UserPlus size={18} className="mr-2" /> Add First Doctor
+                    {
+                        activeView === 'DOCTORS' && (
+                            <div className="space-y-6 animate-fade-in pb-10">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-slate-900 font-heading">Doctors Management</h3>
+                                        <p className="text-slate-500 text-sm">Add, edit availability, and manage your hospital's doctors</p>
+                                    </div>
+                                    <Button onClick={handleAddDoctorClick} className="flex items-center gap-2">
+                                        <UserPlus size={18} /> Add New Doctor
                                     </Button>
-                                </Card>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {doctors.map((doctor: any) => (
-                                        <Card key={doctor.id} className="hover:shadow-lg transition-shadow">
-                                            <div className="flex items-start gap-4 mb-4">
-                                                <div className="w-14 h-14 rounded-xl bg-primary-50 flex items-center justify-center text-primary-600 font-bold text-xl">
-                                                    {doctor.full_name?.charAt(0) || 'D'}
-                                                </div>
-                                                <div className="flex-1">
-                                                    <h4 className="font-bold text-slate-900 font-heading text-lg">{doctor.full_name}</h4>
-                                                    <p className="text-primary-600 font-medium text-sm">{doctor.specialization}</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-3 text-sm border-t border-slate-100 pt-4">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-slate-500">Personal Email</span>
-                                                    <span className="font-medium text-slate-900 truncate max-w-[180px]">{doctor.email || 'N/A'}</span>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-slate-500">Phone</span>
-                                                    <span className="font-medium text-slate-900">{doctor.phone || 'N/A'}</span>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-slate-500">BMDC Number</span>
-                                                    <span className="font-medium text-slate-900">{doctor.bmdc_number || 'N/A'}</span>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-slate-500">Consultation Fee</span>
-                                                    <span className="font-bold text-green-600">৳ {doctor.consultation_fee || 'N/A'}</span>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-slate-500">Experience</span>
-                                                    <span className="font-medium text-slate-900">{doctor.experience_years || 0} years</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Action Buttons */}
-                                            <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
-                                                <Button
-                                                    variant="outline"
-                                                    className="flex-1"
-                                                    onClick={() => handleEditDoctorClick(doctor)}
-                                                >
-                                                    <Edit3 size={16} className="mr-2" /> Edit Availability
-                                                </Button>
-                                                <Button
-                                                    variant="danger"
-                                                    onClick={() => {
-                                                        setDoctorToDelete(doctor.id);
-                                                        setIsDeleteModalOpen(true);
-                                                    }}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </Button>
-                                            </div>
-                                        </Card>
-                                    ))}
                                 </div>
-                            )}
-                        </div>
-                    )}
+
+                                {isLoadingDoctors ? (
+                                    <div className="text-center py-12">
+                                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                        <p className="mt-3 text-slate-500">Loading doctors...</p>
+                                    </div>
+                                ) : doctors.length === 0 ? (
+                                    <Card className="text-center py-12">
+                                        <Users size={48} className="mx-auto text-slate-300 mb-4" />
+                                        <p className="text-slate-500 mb-4">No doctors found for this hospital</p>
+                                        <Button onClick={handleAddDoctorClick}>
+                                            <UserPlus size={18} className="mr-2" /> Add First Doctor
+                                        </Button>
+                                    </Card>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {doctors.map((doctor: any) => (
+                                            <Card key={doctor.id} className="hover:shadow-lg transition-shadow">
+                                                <div className="flex items-start gap-4 mb-4">
+                                                    <div className="w-14 h-14 rounded-xl bg-primary-50 flex items-center justify-center text-primary-600 font-bold text-xl">
+                                                        {doctor.full_name?.charAt(0) || 'D'}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <h4 className="font-bold text-slate-900 font-heading text-lg">{doctor.full_name}</h4>
+                                                        <p className="text-primary-600 font-medium text-sm">{doctor.specialization}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-3 text-sm border-t border-slate-100 pt-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-500">Personal Email</span>
+                                                        <span className="font-medium text-slate-900 truncate max-w-[180px]">{doctor.email || 'N/A'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-500">Phone</span>
+                                                        <span className="font-medium text-slate-900">{doctor.phone || 'N/A'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-500">BMDC Number</span>
+                                                        <span className="font-medium text-slate-900">{doctor.bmdc_number || 'N/A'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-500">Consultation Fee</span>
+                                                        <span className="font-bold text-green-600">৳ {doctor.consultation_fee || 'N/A'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-500">Experience</span>
+                                                        <span className="font-medium text-slate-900">{doctor.experience_years || 0} years</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Action Buttons */}
+                                                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
+                                                    <Button
+                                                        variant="outline"
+                                                        className="flex-1"
+                                                        onClick={() => handleEditDoctorClick(doctor)}
+                                                    >
+                                                        <Edit3 size={16} className="mr-2" /> Edit Availability
+                                                    </Button>
+                                                    <Button
+                                                        variant="danger"
+                                                        onClick={() => {
+                                                            setDoctorToDelete(doctor.id);
+                                                            setIsDeleteModalOpen(true);
+                                                        }}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </Button>
+                                                </div>
+                                            </Card>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    }
 
                     {/* --- APPOINTMENTS MANAGEMENT --- */}
-                    {activeView === 'APPOINTMENTS' && (
-                        <div className="space-y-6 animate-fade-in pb-10">
-                            <div>
-                                <h3 className="text-xl font-bold text-slate-900 font-heading">Appointments</h3>
-                                <p className="text-slate-500 text-sm">View and manage all hospital appointments</p>
-                            </div>
-
-                            {/* Filters */}
-                            <div className="flex flex-wrap gap-4 bg-white p-4 rounded-xl border border-slate-200">
-                                <div className="flex-1 min-w-[200px]">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-3 text-slate-400" size={18} />
-                                        <input
-                                            type="text"
-                                            placeholder="Search by patient name or ID..."
-                                            className="w-full pl-10 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            value={appointmentFilter.search}
-                                            onChange={(e) => setAppointmentFilter({ ...appointmentFilter, search: e.target.value })}
-                                        />
-                                    </div>
+                    {
+                        activeView === 'APPOINTMENTS' && (
+                            <div className="space-y-6 animate-fade-in pb-10">
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-900 font-heading">Appointments</h3>
+                                    <p className="text-slate-500 text-sm">View and manage all hospital appointments</p>
                                 </div>
-                                <select
-                                    className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={appointmentFilter.status}
-                                    onChange={(e) => setAppointmentFilter({ ...appointmentFilter, status: e.target.value })}
-                                >
-                                    <option value="All">All Status</option>
-                                    <option value="Scheduled">Scheduled</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="Cancelled">Cancelled</option>
-                                </select>
-                                <input
-                                    type="date"
-                                    className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={appointmentFilter.date}
-                                    onChange={(e) => setAppointmentFilter({ ...appointmentFilter, date: e.target.value })}
-                                />
-                            </div>
 
-                            {/* Appointments Table */}
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                <table className="w-full">
-                                    <thead className="bg-slate-50 border-b border-slate-200">
-                                        <tr>
-                                            <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Patient</th>
-                                            <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Doctor</th>
-                                            <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Date & Time</th>
-                                            <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Status</th>
-                                            <th className="text-right p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {appointments.length === 0 ? (
+                                {/* Filters */}
+                                <div className="flex flex-wrap gap-4 bg-white p-4 rounded-xl border border-slate-200">
+                                    <div className="flex-1 min-w-[200px]">
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-3 text-slate-400" size={18} />
+                                            <input
+                                                type="text"
+                                                placeholder="Search by patient name or ID..."
+                                                className="w-full pl-10 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                value={appointmentFilter.search}
+                                                onChange={(e) => setAppointmentFilter({ ...appointmentFilter, search: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                    <select
+                                        className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={appointmentFilter.status}
+                                        onChange={(e) => setAppointmentFilter({ ...appointmentFilter, status: e.target.value })}
+                                    >
+                                        <option value="All">All Status</option>
+                                        <option value="Scheduled">Scheduled</option>
+                                        <option value="Completed">Completed</option>
+                                        <option value="Cancelled">Cancelled</option>
+                                    </select>
+                                    <input
+                                        type="date"
+                                        className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={appointmentFilter.date}
+                                        onChange={(e) => setAppointmentFilter({ ...appointmentFilter, date: e.target.value })}
+                                    />
+                                </div>
+
+                                {/* Appointments Table */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <table className="w-full">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
                                             <tr>
-                                                <td colSpan={5} className="p-8 text-center text-slate-500">
-                                                    No appointments found matching your filters
-                                                </td>
+                                                <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Patient</th>
+                                                <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Doctor</th>
+                                                <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Date & Time</th>
+                                                <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Status</th>
+                                                <th className="text-right p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Actions</th>
                                             </tr>
-                                        ) : (
-                                            appointments.map((apt: any) => (
-                                                <tr key={apt.id} className="hover:bg-slate-50 transition-colors">
-                                                    <td className="p-4">
-                                                        <div className="font-bold text-slate-900">{apt.patient_name}</div>
-                                                        <div className="text-xs text-slate-500">ID: #{apt.patient_id}</div>
-                                                    </td>
-                                                    <td className="p-4">
-                                                        <div className="font-medium text-slate-900">{apt.doctor_name}</div>
-                                                        <div className="text-xs text-slate-500">{apt.specialization}</div>
-                                                    </td>
-                                                    <td className="p-4">
-                                                        <div className="font-medium text-slate-900">{new Date(apt.appointment_date).toLocaleDateString()}</div>
-                                                        <div className="text-xs text-slate-500">{apt.appointment_time}</div>
-                                                    </td>
-                                                    <td className="p-4">
-                                                        <Badge variant={
-                                                            apt.status === 'Completed' ? 'success' :
-                                                                apt.status === 'Cancelled' ? 'danger' : 'warning'
-                                                        }>
-                                                            {apt.status}
-                                                        </Badge>
-                                                    </td>
-                                                    <td className="p-4 text-right">
-                                                        <Button variant="outline" size="sm">Details</Button>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {appointments.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={5} className="p-8 text-center text-slate-500">
+                                                        No appointments found matching your filters
                                                     </td>
                                                 </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
+                                            ) : (
+                                                appointments.map((apt: any) => (
+                                                    <tr key={apt.id} className="hover:bg-slate-50 transition-colors">
+                                                        <td className="p-4">
+                                                            <div className="font-bold text-slate-900">{apt.patient_name}</div>
+                                                            <div className="text-xs text-slate-500">ID: #{apt.patient_id}</div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="font-medium text-slate-900">{apt.doctor_name}</div>
+                                                            <div className="text-xs text-slate-500">{apt.specialization}</div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="font-medium text-slate-900">{new Date(apt.appointment_date).toLocaleDateString()}</div>
+                                                            <div className="text-xs text-slate-500">{apt.appointment_time}</div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <Badge variant={
+                                                                apt.status === 'Completed' ? 'success' :
+                                                                    apt.status === 'Cancelled' ? 'danger' : 'warning'
+                                                            }>
+                                                                {apt.status}
+                                                            </Badge>
+                                                        </td>
+                                                        <td className="p-4 text-right">
+                                                            <Button variant="outline" size="sm">Details</Button>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )
+                    }
 
                     {/* --- DEPARTMENTS & RESOURCES --- */}
-                    {activeView === 'DEPARTMENTS' && (
-                        <div className="space-y-6 animate-fade-in pb-10">
-                            <div>
-                                <h3 className="text-xl font-bold text-slate-900 font-heading">Hospital Resources & Departments</h3>
-                                <p className="text-slate-500 text-sm">Manage beds, departments, tests, and resources</p>
-                            </div>
-
-                            {/* Bed Statistics */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <Card className="bg-white border-l-4 border-l-red-500">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">ICU Beds</p>
-                                            <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">
-                                                {hospital.icuAvailable}/20
-                                            </h2>
-                                        </div>
-                                        <div className="p-2.5 bg-red-50 text-red-600 rounded-xl"><Activity size={20} /></div>
-                                    </div>
-                                    <div className="mt-3 text-xs text-red-600 font-bold bg-red-50 px-2 py-1 rounded inline-block">
-                                        {hospital.icuAvailable} Available
-                                    </div>
-                                </Card>
-
-                                <Card className="bg-white border-l-4 border-l-blue-500">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">General Ward</p>
-                                            <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">
-                                                {hospital.generalBedsAvailable}/200
-                                            </h2>
-                                        </div>
-                                        <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><Building2 size={20} /></div>
-                                    </div>
-                                    <div className="mt-3 text-xs text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded inline-block">
-                                        {hospital.generalBedsAvailable} Available
-                                    </div>
-                                </Card>
-
-                                <Card className="bg-white border-l-4 border-l-purple-500">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">Departments</p>
-                                            <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">{MOCK_DEPARTMENTS.length}</h2>
-                                        </div>
-                                        <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl"><Activity size={20} /></div>
-                                    </div>
-                                    <div className="mt-3 text-xs text-purple-600 font-bold bg-purple-50 px-2 py-1 rounded inline-block">
-                                        Active Services
-                                    </div>
-                                </Card>
-                            </div>
-
-                            {/* Departments List */}
-                            <Card>
-                                <div className="flex justify-between items-center mb-6">
-                                    <h4 className="font-bold text-lg text-slate-800 font-heading">Departments & Services</h4>
-                                    <Button variant="outline" size="sm">
-                                        <Plus size={16} className="mr-2" /> Add Department
-                                    </Button>
+                    {
+                        activeView === 'DEPARTMENTS' && (
+                            <div className="space-y-6 animate-fade-in pb-10">
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-900 font-heading">Hospital Resources & Departments</h3>
+                                    <p className="text-slate-500 text-sm">Manage beds, departments, tests, and resources</p>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {MOCK_DEPARTMENTS.map((dept: any, idx) => (
-                                        <div key={idx} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <h5 className="font-bold text-slate-900">{dept.name}</h5>
-                                                    <p className="text-sm text-slate-500 mt-1">Head: {dept.head || 'Not assigned'}</p>
-                                                </div>
-                                                <Badge variant="success">Active</Badge>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </Card>
 
-                            {/* Update Resources Action */}
-                            <Card className="bg-blue-50 border-blue-200">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-4">
-                                        <div className="p-3 bg-blue-100 rounded-xl text-blue-600">
-                                            <AlertCircle size={24} />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-blue-900">Update Resource Availability</h4>
-                                            <p className="text-sm text-blue-700">Keep bed counts and resource availability up to date</p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        onClick={() => {
-                                            setResourceForm({
-                                                icuAvailable: hospital.icuAvailable,
-                                                generalBedsAvailable: hospital.generalBedsAvailable,
-                                                totalIcu: 20,
-                                                totalGeneral: 200
-                                            });
-                                            setIsResourceModalOpen(true);
-                                        }}
-                                    >
-                                        <Edit3 size={18} className="mr-2" /> Update Resources
-                                    </Button>
-                                </div>
-                            </Card>
-                        </div>
-                    )}
-
-                    {/* --- DOCTOR SCHEDULE MANAGEMENT --- */}
-                    {activeView === 'DOCTOR_SCHEDULES' && (
-                        <div className="space-y-6 animate-fade-in pb-10">
-                            {!selectedDoctorSchedule ? (
-                                // OVERVIEW: All doctors schedule summary
-                                <>
-                                    <div>
-                                        <h3 className="text-xl font-bold text-slate-900 font-heading">Doctor Schedule Overview</h3>
-                                        <p className="text-slate-500 text-sm">Manage availability schedules for all doctors</p>
-                                    </div>
-
-                                    {isLoadingSchedules ? (
-                                        <div className="text-center py-12">
-                                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                            <p className="mt-3 text-slate-500">Loading schedules...</p>
-                                        </div>
-                                    ) : schedules.length === 0 ? (
-                                        <Card className="text-center py-12">
-                                            <Calendar size={48} className="mx-auto text-slate-300 mb-4" />
-                                            <p className="text-slate-500">No doctors found</p>
-                                        </Card>
-                                    ) : (
-                                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                            <table className="w-full">
-                                                <thead className="bg-slate-50 border-b border-slate-200">
-                                                    <tr>
-                                                        <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Doctor</th>
-                                                        <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Specialization</th>
-                                                        <th className="text-center p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Slots</th>
-                                                        <th className="text-center p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Active</th>
-                                                        <th className="text-center p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Inactive</th>
-                                                        <th className="text-right p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {schedules.map((schedule: any) => (
-                                                        <tr key={schedule.id} className="hover:bg-slate-50 transition-colors">
-                                                            <td className="p-4">
-                                                                <div className="font-bold text-slate-900">{schedule.name}</div>
-                                                            </td>
-                                                            <td className="p-4 text-slate-600">{schedule.specialization}</td>
-                                                            <td className="p-4 text-center">
-                                                                <Badge variant={schedule.total_slots > 0 ? 'success' : 'default'}>
-                                                                    {schedule.total_slots}
-                                                                </Badge>
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <Badge variant="success">{schedule.active_slots}</Badge>
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <Badge variant="default">{schedule.inactive_slots}</Badge>
-                                                            </td>
-                                                            <td className="p-4 text-right">
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={() => setSelectedDoctorSchedule(schedule.id)}
-                                                                >
-                                                                    <Calendar size={16} className="mr-2" /> Manage Schedule
-                                                                </Button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                // DETAILED VIEW: Individual doctor schedule management
-                                <>
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-3">
-                                            <Button variant="outline" onClick={() => setSelectedDoctorSchedule(null)}>
-                                                <ArrowLeft size={18} />
-                                            </Button>
-                                            <div>
-                                                <h3 className="text-xl font-bold text-slate-900 font-heading">
-                                                    {schedules.find(s => s.id === selectedDoctorSchedule)?.name}'s Schedule
-                                                </h3>
-                                                <p className="text-slate-500 text-sm">Manage time slots and availability</p>
-                                            </div>
-                                        </div>
-                                        <Button onClick={handleAddSlotClick} className="flex items-center gap-2">
-                                            <Plus size={18} /> Add Time Slot
-                                        </Button>
-                                    </div>
-
-                                    {isLoadingSlots ? (
-                                        <div className="text-center py-12">
-                                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                            <p className="mt-3 text-slate-500">Loading slots...</p>
-                                        </div>
-                                    ) : doctorSlots.length === 0 ? (
-                                        <Card className="text-center py-12">
-                                            <Clock size={48} className="mx-auto text-slate-300 mb-4" />
-                                            <p className="text-slate-500 mb-4">No time slots configured yet</p>
-                                            <Button onClick={handleAddSlotClick}>
-                                                <Plus size={18} className="mr-2" /> Add First Time Slot
-                                            </Button>
-                                        </Card>
-                                    ) : (
-                                        // Group slots by day
-                                        <div className="space-y-4">
-                                            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
-                                                const daySlots = doctorSlots.filter(slot => slot.day_of_week === day);
-                                                if (daySlots.length === 0) return null;
+                                {/* Bed Statistics */}
+                                {isLoadingResources ? (
+                                    <Card className="p-12 text-center">
+                                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                                        <p className="mt-4 text-slate-600">Loading resources...</p>
+                                    </Card>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        {hospitalResources.length === 0 ? (
+                                            <Card className="col-span-full p-8 text-center">
+                                                <AlertCircle size={48} className="mx-auto text-slate-300 mb-4" />
+                                                <p className="text-slate-500">No bed resources configured yet</p>
+                                            </Card>
+                                        ) : (
+                                            hospitalResources.map(resource => {
+                                                const resourceName = resource.resource_type.replace('_', ' ');
+                                                const availabilityPercent = (resource.available / resource.total_capacity) * 100;
+                                                const color =
+                                                    resource.resource_type === 'ICU' ? 'red' :
+                                                        resource.resource_type === 'CCU' ? 'orange' :
+                                                            resource.resource_type === 'CABIN' ? 'purple' : 'blue';
 
                                                 return (
-                                                    <Card key={day}>
-                                                        <div className="border-b border-slate-100 pb-3 mb-4">
-                                                            <h4 className="font-bold text-slate-900">{day}</h4>
+                                                    <Card key={resource.id} className={`bg-white border-l-4 border-l-${color}-500 cursor-pointer hover:shadow-lg transition-shadow`} onClick={() => handleOpenResourceEdit(resource)}>
+                                                        <div className="flex justify-between items-start">
+                                                            <div>
+                                                                <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">{resourceName}</p>
+                                                                <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">
+                                                                    {resource.available}/{resource.total_capacity}
+                                                                </h2>
+                                                            </div>
+                                                            <div className={`p-2.5 bg-${color}-50 text-${color}-600 rounded-xl`}><Activity size={20} /></div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            {daySlots.map(slot => (
-                                                                <div key={slot.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                                                    <div className="flex items-center gap-6">
-                                                                        <div>
-                                                                            <div className="font-bold text-slate-900">{slot.start_time} - {slot.end_time}</div>
-                                                                            <div className="text-sm text-slate-500">
-                                                                                {slot.max_patients} patients • {slot.consultation_duration} min/patient
-                                                                            </div>
-                                                                        </div>
-                                                                        <Badge variant={slot.is_active ? 'success' : 'default'}>
-                                                                            {slot.is_active ? 'Active' : 'Inactive'}
-                                                                        </Badge>
-                                                                    </div>
-                                                                    <div className="flex gap-2">
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            onClick={() => handleToggleSlotStatus(slot.id)}
-                                                                        >
-                                                                            {slot.is_active ? <Pause size={16} /> : <Play size={16} />}
-                                                                        </Button>
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            onClick={() => handleEditSlotClick(slot)}
-                                                                        >
-                                                                            <Edit3 size={16} />
-                                                                        </Button>
-                                                                        <Button
-                                                                            variant="danger"
-                                                                            size="sm"
-                                                                            onClick={() => handleDeleteSlot(slot.id)}
-                                                                        >
-                                                                            <Trash2 size={16} />
-                                                                        </Button>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
+                                                        <div className="mt-3">
+                                                            <div className="flex justify-between text-xs mb-1">
+                                                                <span className="text-slate-500">Availability</span>
+                                                                <span className={`font-bold ${availabilityPercent > 50 ? 'text-green-600' : availabilityPercent > 20 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                                    {availabilityPercent.toFixed(0)}%
+                                                                </span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-200 rounded-full h-2">
+                                                                <div
+                                                                    className={`h-2 rounded-full transition-all ${availabilityPercent > 50 ? 'bg-green-500' : availabilityPercent > 20 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                                                    style={{ width: `${availabilityPercent}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-3 text-xs">
+                                                            <Button variant="outline" size="sm" className="w-full" onClick={(e) => { e.stopPropagation(); handleOpenResourceEdit(resource); }}>
+                                                                <Edit3 size={14} className="mr-1" /> Update
+                                                            </Button>
                                                         </div>
                                                     </Card>
                                                 );
-                                            })}
+                                            })
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Departments List */}
+                                <Card>
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h4 className="font-bold text-lg text-slate-800 font-heading">Departments & Services</h4>
+                                        <Badge variant="success">{departments.length} Active</Badge>
+                                    </div>
+                                    {departments.length === 0 ? (
+                                        <div className="text-center py-8">
+                                            <Building2 size={48} className="mx-auto text-slate-300 mb-4" />
+                                            <p className="text-slate-500">No departments configured yet</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {departments.map((dept: any) => (
+                                                <div key={dept.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <h5 className="font-bold text-slate-900">{dept.name}</h5>
+                                                            {dept.description && (
+                                                                <p className="text-sm text-slate-500 mt-1">{dept.description}</p>
+                                                            )}
+                                                        </div>
+                                                        <Badge variant={dept.is_active ? "success" : "default"}>
+                                                            {dept.is_active ? 'Active' : 'Inactive'}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
-                                </>
-                            )}
-                        </div>
-                    )}
+                                </Card>
+                            </div>
+                        )
+                    }
+
+                    {/* --- DOCTOR SCHEDULE MANAGEMENT --- */}
+                    {
+                        activeView === 'DOCTOR_SCHEDULES' && (
+                            <div className="space-y-6 animate-fade-in pb-10">
+                                {!selectedDoctorSchedule ? (
+                                    // OVERVIEW: All doctors schedule summary
+                                    <>
+                                        <div>
+                                            <h3 className="text-xl font-bold text-slate-900 font-heading">Doctor Schedule Overview</h3>
+                                            <p className="text-slate-500 text-sm">Manage availability schedules for all doctors</p>
+                                        </div>
+
+                                        {isLoadingSchedules ? (
+                                            <div className="text-center py-12">
+                                                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                                <p className="mt-3 text-slate-500">Loading schedules...</p>
+                                            </div>
+                                        ) : schedules.length === 0 ? (
+                                            <Card className="text-center py-12">
+                                                <Calendar size={48} className="mx-auto text-slate-300 mb-4" />
+                                                <p className="text-slate-500">No doctors found</p>
+                                            </Card>
+                                        ) : (
+                                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                                <table className="w-full">
+                                                    <thead className="bg-slate-50 border-b border-slate-200">
+                                                        <tr>
+                                                            <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Doctor</th>
+                                                            <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Specialization</th>
+                                                            <th className="text-center p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Slots</th>
+                                                            <th className="text-center p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Active</th>
+                                                            <th className="text-center p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Inactive</th>
+                                                            <th className="text-right p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {schedules.map((schedule: any) => (
+                                                            <tr key={schedule.id} className="hover:bg-slate-50 transition-colors">
+                                                                <td className="p-4">
+                                                                    <div className="font-bold text-slate-900">{schedule.name}</div>
+                                                                </td>
+                                                                <td className="p-4 text-slate-600">{schedule.specialization}</td>
+                                                                <td className="p-4 text-center">
+                                                                    <Badge variant={schedule.total_slots > 0 ? 'success' : 'default'}>
+                                                                        {schedule.total_slots}
+                                                                    </Badge>
+                                                                </td>
+                                                                <td className="p-4 text-center">
+                                                                    <Badge variant="success">{schedule.active_slots}</Badge>
+                                                                </td>
+                                                                <td className="p-4 text-center">
+                                                                    <Badge variant="default">{schedule.inactive_slots}</Badge>
+                                                                </td>
+                                                                <td className="p-4 text-right">
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() => setSelectedDoctorSchedule(schedule.id)}
+                                                                    >
+                                                                        <Calendar size={16} className="mr-2" /> Manage Schedule
+                                                                    </Button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    // DETAILED VIEW: Individual doctor schedule management
+                                    <>
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-3">
+                                                <Button variant="outline" onClick={() => setSelectedDoctorSchedule(null)}>
+                                                    <ArrowLeft size={18} />
+                                                </Button>
+                                                <div>
+                                                    <h3 className="text-xl font-bold text-slate-900 font-heading">
+                                                        {schedules.find(s => s.id === selectedDoctorSchedule)?.name}'s Schedule
+                                                    </h3>
+                                                    <p className="text-slate-500 text-sm">Manage time slots and availability</p>
+                                                </div>
+                                            </div>
+                                            <Button onClick={handleAddSlotClick} className="flex items-center gap-2">
+                                                <Plus size={18} /> Add Time Slot
+                                            </Button>
+                                        </div>
+
+                                        {isLoadingSlots ? (
+                                            <div className="text-center py-12">
+                                                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                                <p className="mt-3 text-slate-500">Loading slots...</p>
+                                            </div>
+                                        ) : doctorSlots.length === 0 ? (
+                                            <Card className="text-center py-12">
+                                                <Clock size={48} className="mx-auto text-slate-300 mb-4" />
+                                                <p className="text-slate-500 mb-4">No time slots configured yet</p>
+                                                <Button onClick={handleAddSlotClick}>
+                                                    <Plus size={18} className="mr-2" /> Add First Time Slot
+                                                </Button>
+                                            </Card>
+                                        ) : (
+                                            // Group slots by day
+                                            <div className="space-y-4">
+                                                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+                                                    const daySlots = doctorSlots.filter(slot => slot.day_of_week === day);
+                                                    if (daySlots.length === 0) return null;
+
+                                                    return (
+                                                        <Card key={day}>
+                                                            <div className="border-b border-slate-100 pb-3 mb-4">
+                                                                <h4 className="font-bold text-slate-900">{day}</h4>
+                                                            </div>
+                                                            <div className="space-y-3">
+                                                                {daySlots.map(slot => (
+                                                                    <div key={slot.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                                                        <div className="flex items-center gap-6">
+                                                                            <div>
+                                                                                <div className="font-bold text-slate-900">{slot.start_time} - {slot.end_time}</div>
+                                                                                <div className="text-sm text-slate-500">
+                                                                                    {slot.max_patients} patients • {slot.consultation_duration} min/patient
+                                                                                </div>
+                                                                            </div>
+                                                                            <Badge variant={slot.is_active ? 'success' : 'default'}>
+                                                                                {slot.is_active ? 'Active' : 'Inactive'}
+                                                                            </Badge>
+                                                                        </div>
+                                                                        <div className="flex gap-2">
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                onClick={() => handleToggleSlotStatus(slot.id)}
+                                                                            >
+                                                                                {slot.is_active ? <Pause size={16} /> : <Play size={16} />}
+                                                                            </Button>
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                onClick={() => handleEditSlotClick(slot)}
+                                                                            >
+                                                                                <Edit3 size={16} />
+                                                                            </Button>
+                                                                            <Button
+                                                                                variant="danger"
+                                                                                size="sm"
+                                                                                onClick={() => handleDeleteSlot(slot.id)}
+                                                                            >
+                                                                                <Trash2 size={16} />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </Card>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        )
+                    }
 
                     {/* ... (Other views fallback) ... */}
-                </div>
-            </div>
+                </div >
+            </div >
 
             {/* MODALS (Kept same structure, inherits new styles) */}
             {/* RESOURCE UPDATE MODAL */}
-            <Modal isOpen={isResourceModalOpen} onClose={() => setIsResourceModalOpen(false)} title="Update Resource Status">
+            <Modal isOpen={isResourceModalOpen} onClose={() => setIsResourceModalOpen(false)} title={selectedResource ? `Update ${selectedResource.resource_type.replace('_', ' ')} Beds` : "Update Resource"}>
                 <div className="space-y-6">
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">ICU Beds Available</label>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">Available Beds</label>
                         <div className="flex items-center gap-3">
                             <input
                                 type="number"
                                 className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 transition-all font-bold text-lg bg-white"
-                                value={resourceForm.icuAvailable}
-                                onChange={(e) => setResourceForm({ ...resourceForm, icuAvailable: Number(e.target.value) })}
+                                value={resourceForm.available}
+                                onChange={(e) => setResourceForm({ ...resourceForm, available: Number(e.target.value) })}
                                 min={0}
-                                max={resourceForm.totalIcu}
+                                max={resourceForm.total_capacity}
                             />
-                            <span className="text-slate-400 font-medium">/ {resourceForm.totalIcu}</span>
+                            <span className="text-slate-400 font-medium">/ {resourceForm.total_capacity}</span>
                         </div>
+                        <p className="text-xs text-slate-500 mt-1">Number of beds currently available</p>
                     </div>
 
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">General Ward Beds Available</label>
-                        <div className="flex items-center gap-3">
-                            <input
-                                type="number"
-                                className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 transition-all font-bold text-lg bg-white"
-                                value={resourceForm.generalBedsAvailable}
-                                onChange={(e) => setResourceForm({ ...resourceForm, generalBedsAvailable: Number(e.target.value) })}
-                                min={0}
-                                max={resourceForm.totalGeneral}
-                            />
-                            <span className="text-slate-400 font-medium">/ {resourceForm.totalGeneral}</span>
-                        </div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">Total Capacity</label>
+                        <input
+                            type="number"
+                            className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 transition-all font-bold text-lg bg-white"
+                            value={resourceForm.total_capacity}
+                            onChange={(e) => setResourceForm({ ...resourceForm, total_capacity: Number(e.target.value) })}
+                            min={1}
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Maximum number of beds in this category</p>
                     </div>
 
                     <div className="p-4 bg-yellow-50 rounded-xl text-yellow-800 text-sm flex items-start gap-3 border border-yellow-100">
@@ -1969,6 +2012,6 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
             </Modal>
 
             {/* ... (Other Modals) ... */}
-        </div>
+        </div >
     );
 };

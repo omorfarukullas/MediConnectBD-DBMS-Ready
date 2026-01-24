@@ -3,14 +3,14 @@ const multer = require('multer');
 const path = require('path');
 const { protect } = require('../middleware/authMiddleware');
 const { validateAppointmentAccess, validateDocumentAccess } = require('../middleware/appointmentAccessMiddleware');
-const { 
-    uploadDocument, 
-    getDocuments, 
-    getPatientDocuments, 
+const {
+    uploadDocument,
+    getDocuments,
+    getPatientDocuments,
     deleteDocument,
     updateDocumentPrivacy,
     updateDocumentVisibility,
-    downloadDocument 
+    downloadDocument
 } = require('../controllers/documentController');
 
 const router = express.Router();
@@ -110,9 +110,9 @@ router.patch('/:id/visibility', protect, updateDocumentVisibility);
 /**
  * @route   GET /api/documents/:id/download
  * @desc    Download a document
- * @access  Private - Privacy filtered for doctors
+ * @access  Private - Privacy filtered and time-gated for doctors
  */
-router.get('/:id/download', protect, downloadDocument);
+router.get('/:id/download', protect, validateDocumentAccess, downloadDocument);
 
 /**
  * @route   DELETE /api/documents/:id

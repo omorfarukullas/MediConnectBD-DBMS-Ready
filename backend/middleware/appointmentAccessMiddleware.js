@@ -35,7 +35,7 @@ const validateAppointmentAccess = async (req, res, next) => {
   try {
     const doctorId = req.user.id;
     const doctorRole = req.user.role;
-    
+
     // Only apply to doctors
     if (doctorRole !== 'DOCTOR') {
       return next();
@@ -43,23 +43,23 @@ const validateAppointmentAccess = async (req, res, next) => {
 
     // Get patient ID from request (could be in params, body, or query)
     const patientId = req.params.patientId || req.body.patientId || req.query.patientId;
-    
+
     if (!patientId) {
-      return res.status(400).json({ 
-        message: 'Patient ID is required' 
+      return res.status(400).json({
+        message: 'Patient ID is required'
       });
     }
 
     // Check if doctor has an active appointment with this patient TODAY
     const today = new Date().toISOString().split('T')[0];
-    
+
     const [appointments] = await pool.execute(
       `SELECT id, appointment_date, appointment_time, status
        FROM appointments 
        WHERE doctor_id = ? 
        AND patient_id = ? 
        AND appointment_date = ?
-       AND status IN ('PENDING', 'ACCEPTED', 'CONFIRMED')
+       AND status IN ('CONFIRMED', 'IN_PROGRESS')
        ORDER BY appointment_time ASC
        LIMIT 1`,
       [doctorId, patientId, today]
@@ -74,7 +74,7 @@ const validateAppointmentAccess = async (req, res, next) => {
 
     const appointment = appointments[0];
     const appointmentDateTime = `${appointment.appointment_date} ${appointment.appointment_time}`;
-    
+
     // Check if appointment is currently active (within time window)
     if (!isAppointmentActive(appointmentDateTime, 15)) {
       return res.status(403).json({
@@ -89,9 +89,9 @@ const validateAppointmentAccess = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Error in validateAppointmentAccess:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: 'Error validating appointment access',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -129,8 +129,8 @@ const validateDocumentAccess = async (req, res, next) => {
 
     // For doctors: check privacy and time restrictions
     if (userRole === 'DOCTOR') {
-      // Check if document is private
-      if (document.is_private) {
+      // Check if document is private (using visibility column)
+      if (document.visibility === 'PRIVATE') {
         return res.status(403).json({
           message: 'This document is private and cannot be accessed',
           code: 'PRIVATE_DOCUMENT'
@@ -140,14 +140,14 @@ const validateDocumentAccess = async (req, res, next) => {
       // Check if doctor has active appointment with patient
       const patientId = document.patient_id;
       const today = new Date().toISOString().split('T')[0];
-      
+
       const [appointments] = await pool.execute(
         `SELECT id, appointment_date, appointment_time, status
          FROM appointments 
          WHERE doctor_id = ? 
          AND patient_id = ? 
          AND appointment_date = ?
-         AND status IN ('PENDING', 'ACCEPTED', 'CONFIRMED')
+         AND status IN ('CONFIRMED', 'IN_PROGRESS')
          ORDER BY appointment_time ASC
          LIMIT 1`,
         [userId, patientId, today]
@@ -162,7 +162,7 @@ const validateDocumentAccess = async (req, res, next) => {
 
       const appointment = appointments[0];
       const appointmentDateTime = `${appointment.appointment_date} ${appointment.appointment_time}`;
-      
+
       // Check time window
       if (!isAppointmentActive(appointmentDateTime, 15)) {
         return res.status(403).json({
@@ -180,9 +180,9 @@ const validateDocumentAccess = async (req, res, next) => {
     return res.status(403).json({ message: 'Access denied' });
   } catch (error) {
     console.error('Error in validateDocumentAccess:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: 'Error validating document access',
-      error: error.message 
+      error: error.message
     });
   }
 };
