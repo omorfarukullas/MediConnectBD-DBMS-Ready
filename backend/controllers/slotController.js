@@ -131,14 +131,12 @@ const getAvailableSlots = async (req, res) => {
                     const currentBookings = bookingMap[`${dateStr}_${startHM}`] || 0;
                     const maxPatients = sched.max_patients || 40; // Default if not set
 
-                    // Available if space exists
-                    // We return the slot even if full, so frontend can show "Fully Booked" if desired
-                    // But typically getAvailable means "available". Let's return only if < maxPatients unless full visibility is needed.
-                    // User requirement: "patient can book... queue 1... max 40".
+                    const idString = `${sched.id}${dateStr.replace(/-/g, '')}${startHM.replace(':', '')}`;
+                    console.log(`🔍 [SlotGen] RuleID:${sched.id} Date:${dateStr} Time:${startHM} -> IDStr:${idString}`);
 
                     const slotObj = {
                         // Synthetic ID: RuleID + Date + StartTime
-                        id: parseInt(`${sched.id}${dateStr.replace(/-/g, '')}${startHM.replace(':', '')}`),
+                        id: parseInt(idString),
                         slot_date: dateStr,
                         slot_start_time: startHM, // Represents Session Start
                         slot_end_time: endHM,     // Represents Session End

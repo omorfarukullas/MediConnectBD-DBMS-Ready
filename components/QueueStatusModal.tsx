@@ -30,31 +30,36 @@ const QueueStatusModal: React.FC<QueueStatusModalProps> = ({ appointmentId, onCl
 
   useEffect(() => {
     loadQueueStatus();
-    
+
     // Refresh every 30 seconds
     const interval = setInterval(loadQueueStatus, 30000);
 
     // WebSocket listener for real-time updates
     if (socketService.isConnected()) {
-      socketService.on('queue_update', handleQueueUpdate);
+      socketService.on('queue:update', handleQueueUpdate);
+      socketService.on('queue:called', handleQueueCalled);
     }
 
     return () => {
       clearInterval(interval);
       if (socketService.isConnected()) {
-        socketService.off('queue_update');
+        socketService.off('queue:update');
+        socketService.off('queue:called');
       }
     };
   }, [appointmentId]);
 
   const handleQueueUpdate = (data: any) => {
+    // Refresh if our appointment is updated
     if (data.appointmentId === appointmentId) {
       loadQueueStatus();
-      
-      // Show notification
-      if (data.status === 'called') {
-        showNotification('Your turn! The doctor is calling you now.');
-      }
+    }
+  };
+
+  const handleQueueCalled = (data: any) => {
+    if (data.appointmentId === appointmentId) {
+      loadQueueStatus();
+      showNotification(data.message || 'Your turn! The doctor is calling you now.');
     }
   };
 
@@ -114,7 +119,7 @@ const QueueStatusModal: React.FC<QueueStatusModalProps> = ({ appointmentId, onCl
     const now = new Date();
     const diff = date.getTime() - now.getTime();
     const minutes = Math.floor(diff / 60000);
-    
+
     if (minutes < 0) return 'Soon';
     if (minutes === 0) return 'Now';
     if (minutes < 60) return `${minutes} min`;
@@ -133,7 +138,7 @@ const QueueStatusModal: React.FC<QueueStatusModalProps> = ({ appointmentId, onCl
               Last updated: {lastUpdate.toLocaleTimeString()}
             </p>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
@@ -244,14 +249,14 @@ const QueueStatusModal: React.FC<QueueStatusModalProps> = ({ appointmentId, onCl
 
             {/* Refresh Button */}
             <div className="flex gap-3">
-              <Button 
+              <Button
                 onClick={loadQueueStatus}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
               >
                 <Clock size={18} className="mr-2" />
                 Refresh Status
               </Button>
-              <Button 
+              <Button
                 onClick={onClose}
                 className="bg-gray-100 text-gray-700 hover:bg-gray-200"
               >

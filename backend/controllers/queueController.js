@@ -400,10 +400,92 @@ const getMyPosition = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Get status for a specific appointment
+ * @route   GET /api/queue/patient/:appointmentId
+ * @access  Private (Patient)
+ */
+const getQueueStatus = async (req, res) => {
+    const { appointmentId } = req.params;
+    const patientId = req.user.profile_id;
+    const today = new Date().toISOString().split('T')[0];
+
+    try {
+        // Verify appointment and join details
+        // Get Appointment Queue Details
+        const [rows] = await pool.execute(
+            `SELECT 
+                a.*,
+                d.full_name as doctor_name,
+                d.specialization,
+                aq.queue_number
+            FROM appointments a
+            LEFT JOIN doctors d ON a.doctor_id = d.id
+            LEFT JOIN appointment_queue aq ON a.id = aq.appointment_id
+            WHERE a.id = ? AND a.patient_id = ?`,
+            [appointmentId, patientId]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Appointment not found'
+            });
+        }
+
+        const appointment = rows[0];
+
+        // Calculate patients ahead
+        let patients_before = 0;
+        if (appointment.status === 'PENDING' && appointment.queue_number) {
+            const [ahead] = await pool.execute(
+                `SELECT COUNT(*) as count
+                FROM appointments a
+                JOIN appointment_queue aq ON a.id = aq.appointment_id
+                WHERE a.doctor_id = ?
+                AND a.appointment_date = ?
+                AND aq.queue_number < ?
+                AND a.status = 'PENDING'`,
+                [appointment.doctor_id, today, appointment.queue_number]
+            );
+            patients_before = ahead[0].count;
+        }
+
+        // Response format matching QueueStatusModal expectation
+        const responseData = {
+            id: appointment.id,
+            date: appointment.appointment_date,
+            time: appointment.appointment_time,
+            queue_number: appointment.queue_number || 0,
+            queue_status: (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED') ? 'waiting' : appointment.status.toLowerCase(),
+            estimated_time: new Date(new Date().getTime() + patients_before * 15 * 60000).toISOString(), // rough est
+            called_at: appointment.started_at,
+            doctor_name: appointment.doctor_name,
+            specialization: appointment.specialization,
+            room_number: '101', // Mock room as column doesn't exist
+            patients_before
+        };
+
+        res.json({
+            success: true,
+            data: responseData
+        });
+
+    } catch (error) {
+        console.error('❌ Error in getQueueStatus:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch queue status',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getTodayQueue,
     callNextPatient,
     startAppointment,
     completeAppointment,
-    getMyPosition
+    getMyPosition,
+    getQueueStatus
 };

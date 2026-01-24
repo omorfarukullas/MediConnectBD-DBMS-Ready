@@ -1,22 +1,18 @@
+
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+process.env.DB_NAME = 'mediconnectbdv2';
 const pool = require('../config/db');
 
 async function checkSlots() {
     try {
-        const [rows] = await pool.query('SELECT COUNT(*) as count FROM doctor_slots');
-        console.log(`📊 Total Doctor Slots: ${rows[0].count}`);
-
-        const [samples] = await pool.query('SELECT * FROM doctor_slots LIMIT 3');
-        console.log('🔎 Sample Slots:', JSON.stringify(samples, null, 2));
-
-        if (rows[0].count === 0) {
-            console.log('❌ No slots found!');
-        } else {
-            console.log('✅ Slots exist in DB.');
-        }
+        console.log('🔍 Checking Doctor Slots for Doctor ID 10...');
+        const [slots] = await pool.execute('SELECT * FROM doctor_slots WHERE doctor_id = 10');
+        console.log(JSON.stringify(slots, null, 2));
     } catch (e) {
         console.error(e);
     } finally {
-        pool.end();
+        process.exit();
     }
 }
 

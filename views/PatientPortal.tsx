@@ -84,8 +84,8 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
             setSettingsForm(prev => ({
               ...prev,
               privacy: {
-                shareHistory: privacyData.shareHistory,
-                visibleToSearch: privacyData.visibleToSearch
+                shareHistory: privacyData.data.shareHistory,
+                visibleToSearch: privacyData.data.visibleToSearch
               }
             }));
           } catch (err) {
@@ -762,8 +762,8 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                       {/* Success/Error Message */}
                       {message.text && (
                         <div className={`p-4 rounded-lg border ${message.type === 'success'
-                            ? 'bg-green-50 border-green-200 text-green-800'
-                            : 'bg-red-50 border-red-200 text-red-800'
+                          ? 'bg-green-50 border-green-200 text-green-800'
+                          : 'bg-red-50 border-red-200 text-red-800'
                           } animate-fade-in`}>
                           <p className="font-semibold flex items-center gap-2">
                             {message.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
@@ -901,10 +901,24 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                             </div>
                           </div>
                           <div className="text-right flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-2 md:gap-1 pl-14 md:pl-0">
+                            {/* Live Queue Tracker Button */}
+                            {(appointmentStatus === 'PENDING' || appointmentStatus === 'IN_PROGRESS' || appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openQueueTracker(apt); }}
+                                className="w-full flex items-center justify-center gap-2 mb-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-all animate-fade-in"
+                              >
+                                <span className="relative flex h-3 w-3">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                                </span>
+                                Track Live Queue
+                              </button>
+                            )}
+
                             {(appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
                               <div className="flex items-center gap-2 mb-1 bg-green-50 px-3 py-1 rounded-full border border-green-100">
                                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                                <span className="text-xs font-bold text-green-700">Live Queue</span>
+                                <span className="text-xs font-bold text-green-700">Live Queue Active</span>
                               </div>
                             )}
                             <Badge color={appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED' ? 'green' : appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'red' : appointmentStatus === 'COMPLETED' ? 'blue' : 'yellow'}>{apt.status}</Badge>

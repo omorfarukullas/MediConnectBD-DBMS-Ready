@@ -6,7 +6,8 @@ const {
     callNextPatient,
     startAppointment,
     completeAppointment,
-    getMyPosition
+    getMyPosition,
+    getQueueStatus
 } = require('../controllers/queueController');
 
 /**
@@ -43,5 +44,12 @@ router.put('/:appointmentId/complete', protect, restrictTo('DOCTOR'), completeAp
  * @access  Private (Patient)
  */
 router.get('/my-position', protect, restrictTo('PATIENT'), getMyPosition);
+
+/**
+ * @route   GET /api/queue/patient/:appointmentId
+ * @desc    Get queue status for a specific appointment
+ * @access  Private (Patient)
+ */
+router.get('/patient/:appointmentId', protect, restrictTo('PATIENT'), getQueueStatus);
 
 module.exports = router;

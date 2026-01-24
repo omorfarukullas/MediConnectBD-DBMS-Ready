@@ -11,7 +11,7 @@ const pool = mysql.createPool({
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASS || '',
-    database: process.env.DB_NAME || 'mediconnect',
+    database: process.env.DB_NAME || 'mediconnectbdv2',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,

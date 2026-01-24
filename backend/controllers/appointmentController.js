@@ -54,7 +54,7 @@ const getMyAppointments = async (req, res) => {
             ORDER BY a.appointment_date DESC, a.appointment_time DESC
         `;
 
-        const [appointments] = await pool.execute(query, [req.user.id]);
+        const [appointments] = await pool.execute(query, [req.user.profile_id]);
 
         console.log(`✅ Found ${appointments.length} appointments`);
 
@@ -224,12 +224,12 @@ const bookAppointment = async (req, res) => {
             });
         }
 
-        // Step 5: Create appointment
+        // Step 5: Create appointment - AUTO CONFIRM
         const [result] = await connection.execute(
             `INSERT INTO appointments 
              (patient_id, doctor_id, consultation_type, appointment_date, 
               appointment_time, reason_for_visit, status, created_at, updated_at) 
-             VALUES (?, ?, ?, ?, ?, ?, 'PENDING', NOW(), NOW())`,
+             VALUES (?, ?, ?, ?, ?, ?, 'CONFIRMED', NOW(), NOW())`,
             [
                 patientId,
                 doctorId,
@@ -242,22 +242,28 @@ const bookAppointment = async (req, res) => {
 
         const appointmentId = result.insertId;
 
-        // Step 6: Assign queue number
-        try {
-            await connection.execute(
-                `CALL assign_queue_number(?, ?, ?, ?, @queue_number)`,
-                [appointmentId, doctorId, patientId, appointmentDate]
-            );
-        } catch (procError) {
-            console.warn('⚠️ Stored procedure assign_queue_number might strictly fail or logic fallback.');
-        }
-
-        // Retrieve queue number
-        const [[{ '@queue_number': queueNumberStr }]] = await connection.execute(
-            'SELECT @queue_number'
+        // Step 6: Assign queue number (MANUAL LOGIC - No Stored Procedure dependence)
+        // Check max queue number for this doctor + date
+        const [queueResult] = await connection.execute(
+            `SELECT MAX(queue_number) as max_queue 
+             FROM appointment_queue 
+             JOIN appointments ON appointment_queue.appointment_id = appointments.id
+             WHERE appointments.doctor_id = ? AND appointments.appointment_date = ?`,
+            [doctorId, appointmentDate]
         );
 
-        const queueNumber = queueNumberStr || appointmentId;
+        let nextQueueNumber = (queueResult[0].max_queue || 0) + 1;
+
+        // Insert into appointment_queue
+        await connection.execute(
+            `INSERT INTO appointment_queue (appointment_id, queue_number, patient_id, doctor_id, queue_date, status, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 'waiting', NOW(), NOW())`,
+            [appointmentId, nextQueueNumber, patientId, doctorId, appointmentDate]
+        );
+
+        // Check if any trigger/logic update on appointments table is needed (optional, keeping it simple)
+
+        const queueNumber = nextQueueNumber;
 
         await connection.commit();
 
@@ -283,7 +289,7 @@ const bookAppointment = async (req, res) => {
                 endTime: rule.end_time, // Return session end time
                 appointmentType: rule.consultation_type,
                 consultationFee: rule.consultation_fee,
-                status: 'PENDING',
+                status: 'CONFIRMED',
                 queueNumber: queueNumber,
                 queueStatus: 'waiting'
             }
@@ -291,11 +297,16 @@ const bookAppointment = async (req, res) => {
     } catch (error) {
         await connection.rollback();
         console.error('❌ Error creating appointment:', error);
-        console.error('❌ Error stack:', error.stack);
+        console.error('❌ Error Details:', {
+            message: error.message,
+            code: error.code,
+            sqlMessage: error.sqlMessage,
+            stack: error.stack
+        });
 
         res.status(500).json({
             success: false,
-            message: 'Failed to book appointment',
+            message: 'Failed to book appointment: ' + error.message,
             error: error.message
         });
     } finally {
