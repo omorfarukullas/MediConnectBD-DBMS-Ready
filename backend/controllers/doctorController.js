@@ -24,20 +24,20 @@ const getDoctors = async (req, res) => {
         console.log('🏥 GET /api/doctors - Fetching doctors list');
         const { search, specialty, hospital, city } = req.query;
 
-        // Build WHERE clause dynamically
+        // Build WHERE clause dynamically with table aliases
         const conditions = [];
         const replacements = [];
 
         if (specialty && specialty !== 'All Specialties') {
-            conditions.push('specialization = ?');
+            conditions.push('d.specialization = ?');
             replacements.push(specialty);
         }
         if (city) {
-            conditions.push('city = ?');
+            conditions.push('h.city = ?');
             replacements.push(city);
         }
         if (search) {
-            conditions.push('(full_name LIKE ? OR specialization LIKE ?)');
+            conditions.push('(d.full_name LIKE ? OR d.specialization LIKE ?)');
             replacements.push(`%${search}%`, `%${search}%`);
         }
 
@@ -46,7 +46,12 @@ const getDoctors = async (req, res) => {
         console.log('🔍 Query filters:', { specialty, city, search });
 
         const [doctors] = await pool.execute(
-            `SELECT * FROM doctors ${whereClause} ORDER BY id ASC`,
+            `SELECT d.*, u.email, h.name as hospital_name, h.city
+             FROM doctors d
+             LEFT JOIN users u ON d.user_id = u.id
+             LEFT JOIN hospitals h ON d.hospital_id = h.id
+             ${whereClause} 
+             ORDER BY d.id ASC`,
             replacements
         );
 
@@ -60,7 +65,7 @@ const getDoctors = async (req, res) => {
             phone: doc.phone || '',
             image: `https://ui-avatars.com/api/?name=${encodeURIComponent(doc.full_name || 'Doctor')}&background=0D8ABC&color=fff`,
             specialization: doc.specialization || 'General Medicine',
-            hospital: 'Not specified',
+            hospital: doc.hospital_name || 'Not specified',
             location: doc.city || 'Dhaka',
             fees: {
                 online: parseFloat(doc.consultation_fee || 0),
@@ -84,7 +89,10 @@ const getDoctors = async (req, res) => {
 const getDoctorById = async (req, res) => {
     try {
         const [doctors] = await pool.execute(
-            'SELECT * FROM doctors WHERE id = ?',
+            `SELECT d.*, u.email
+             FROM doctors d
+             LEFT JOIN users u ON d.user_id = u.id
+             WHERE d.id = ?`,
             [req.params.id]
         );
 

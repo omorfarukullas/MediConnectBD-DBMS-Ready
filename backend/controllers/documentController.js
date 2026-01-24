@@ -113,24 +113,6 @@ const getPatientDocuments = async (req, res) => {
             return res.status(403).json({ message: 'Not authorized to view patient documents' });
         }
 
-        // For doctors, check patient's privacy settings first
-        if (userRole === 'DOCTOR') {
-            const [patientSettings] = await pool.execute(
-                'SELECT share_medical_history FROM patients WHERE id = ?',
-                [userId]
-            );
-
-            if (patientSettings.length === 0) {
-                return res.status(404).json({ message: 'Patient not found' });
-            }
-
-            // If patient has disabled sharing medical history, return empty array
-            if (!patientSettings[0].share_medical_history) {
-                console.log(`🔒 Patient ${userId} has disabled medical history sharing`);
-                return res.json([]);
-            }
-        }
-
         let query = `SELECT 
             id, 
             filename as fileName, 

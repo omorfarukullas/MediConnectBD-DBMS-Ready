@@ -170,24 +170,6 @@ const getPatientPrescriptions = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // For doctors, check patient's privacy settings first
-    if (userRole === 'DOCTOR') {
-      const [patientSettings] = await pool.execute(
-        'SELECT share_medical_history FROM patients WHERE id = ?',
-        [patientId]
-      );
-
-      if (patientSettings.length === 0) {
-        return res.status(404).json({ message: 'Patient not found' });
-      }
-
-      // If patient has disabled sharing medical history, return empty array
-      if (!patientSettings[0].share_medical_history) {
-        console.log(`🔒 Patient ${patientId} has disabled medical history sharing`);
-        return res.json([]);
-      }
-    }
-
     // For doctors, filter only PUBLIC prescriptions
     let query = `SELECT p.*, d.full_name as doctor_name
        FROM prescriptions p
