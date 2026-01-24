@@ -7,6 +7,8 @@ const seedAppointments = require('./seedAppointments');
 const seedMedicalRecords = require('./seedMedicalRecords');
 const seedReviews = require('./seedReviews');
 const seedDoctorSlots = require('./seedDoctorSlots');
+const seedHospitalAdmins = require('./seedHospitalAdmins');
+const seedSuperAdmins = require('./seedSuperAdmins');
 
 /**
  * Master Seeder - Runs all seeders in correct order
@@ -26,11 +28,13 @@ async function masterSeed() {
         console.log('Phase 1: Core Users');
         console.log('-'.repeat(60));
         await seedUsers({ patients: 100, doctors: 30, admins: 10, superAdmins: 2 });
+        await seedSuperAdmins();
         console.log('');
 
         console.log('Phase 2: Hospital Infrastructure');
         console.log('-'.repeat(60));
         const hospitalIds = await seedHospitals(15);
+        await seedHospitalAdmins();
         console.log('');
 
         console.log('Phase 3: Doctor Profiles');

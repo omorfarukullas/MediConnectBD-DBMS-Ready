@@ -95,6 +95,7 @@ CREATE TABLE doctors (
     consultation_fee DECIMAL(10, 2) DEFAULT 0.00,
     bio TEXT,
     hospital_id INT,
+    status ENUM('Active', 'Inactive', 'On Leave') DEFAULT 'Active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

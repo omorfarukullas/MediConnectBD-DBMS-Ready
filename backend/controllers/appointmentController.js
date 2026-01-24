@@ -38,10 +38,7 @@ const getMyAppointments = async (req, res) => {
                 du.email as doctor_email,
                 d.specialization as doctor_specialization,
                 h.city as doctor_city,
-                d.consultation_fee,
-                ds.start_time as session_start_time,
-                ds.end_time as session_end_time,
-                ds.max_patients as session_capacity
+                d.consultation_fee
             FROM appointments a
             LEFT JOIN appointment_queue aq ON a.id = aq.appointment_id
             LEFT JOIN patients p ON a.patient_id = p.id
@@ -49,7 +46,6 @@ const getMyAppointments = async (req, res) => {
             LEFT JOIN doctors d ON a.doctor_id = d.id
             LEFT JOIN users du ON d.user_id = du.id
             LEFT JOIN hospitals h ON d.hospital_id = h.id
-            LEFT JOIN doctor_slots ds ON (d.id = ds.doctor_id AND DAYNAME(a.appointment_date) = ds.day_of_week)
             WHERE a.${whereField} = ?
             ORDER BY a.appointment_date DESC, a.appointment_time DESC
         `;
@@ -69,8 +65,6 @@ const getMyAppointments = async (req, res) => {
             patientName: apt.patient_name || 'Unknown Patient',
             date: apt.date,
             time: apt.time, // This is Session Start Time
-            slotStartTime: apt.session_start_time,
-            slotEndTime: apt.session_end_time,
             appointmentType: apt.appointment_type || 'physical',
             consultationType: apt.appointment_type === 'telemedicine' ? 'Telemedicine' : 'In-Person',
             consultationFee: apt.consultation_fee,
@@ -81,7 +75,6 @@ const getMyAppointments = async (req, res) => {
             checkedInAt: apt.checked_in_at,
             startedAt: apt.started_at,
             completedAt: apt.completed_at,
-            slotCapacity: apt.session_capacity,
             createdAt: apt.created_at,
             updatedAt: apt.updated_at
         }));
@@ -243,13 +236,15 @@ const bookAppointment = async (req, res) => {
         const appointmentId = result.insertId;
 
         // Step 6: Assign queue number (MANUAL LOGIC - No Stored Procedure dependence)
-        // Check max queue number for this doctor + date
+        // Check max queue number for this doctor + date + time (session)
         const [queueResult] = await connection.execute(
             `SELECT MAX(queue_number) as max_queue 
              FROM appointment_queue 
              JOIN appointments ON appointment_queue.appointment_id = appointments.id
-             WHERE appointments.doctor_id = ? AND appointments.appointment_date = ?`,
-            [doctorId, appointmentDate]
+             WHERE appointments.doctor_id = ? 
+             AND appointments.appointment_date = ?
+             AND appointments.appointment_time = ?`,
+            [doctorId, appointmentDate, appointmentTime]
         );
 
         let nextQueueNumber = (queueResult[0].max_queue || 0) + 1;

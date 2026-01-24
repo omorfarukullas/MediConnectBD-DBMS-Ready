@@ -41,6 +41,7 @@ const QueueDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<number | null>(null);
+    const [queueStatus, setQueueStatus] = useState<'ACTIVE' | 'STOPPED'>('ACTIVE');
 
     // Get doctor ID from stored user object
     const currentUser = TokenManager.getUser();
@@ -123,7 +124,8 @@ const QueueDashboard: React.FC = () => {
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'PENDING': return 'bg-yellow-100 text-yellow-800';
+            case 'PENDING':
+            case 'CONFIRMED': return 'bg-yellow-100 text-yellow-800';
             case 'IN_PROGRESS': return 'bg-blue-100 text-blue-800';
             case 'COMPLETED': return 'bg-green-100 text-green-800';
             default: return 'bg-gray-100 text-gray-800';
@@ -132,7 +134,8 @@ const QueueDashboard: React.FC = () => {
 
     const getStatusIcon = (status: string) => {
         switch (status) {
-            case 'PENDING': return <Clock className="w-4 h-4" />;
+            case 'PENDING':
+            case 'CONFIRMED': return <Clock className="w-4 h-4" />;
             case 'IN_PROGRESS': return <AlertCircle className="w-4 h-4" />;
             case 'COMPLETED': return <CheckCircle className="w-4 h-4" />;
             default: return null;
@@ -243,15 +246,53 @@ const QueueDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* Call Next Button */}
+            {/* Queue Controls */}
             {queueData.stats.waiting > 0 && !queueData.currentPatient && (
-                <button
-                    onClick={handleCallNext}
-                    disabled={actionLoading === -1}
-                    className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50"
-                >
-                    {actionLoading === -1 ? 'Calling...' : `Call Next Patient (${queueData.stats.waiting} waiting)`}
-                </button>
+                <div className="grid grid-cols-2 gap-4">
+                    <button
+                        onClick={handleCallNext}
+                        disabled={actionLoading === -1}
+                        className="py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        <Users size={20} />
+                        {actionLoading === -1 ? 'Calling...' : `Call Next Patient`}
+                    </button>
+                    {!queueStatus || queueStatus === 'ACTIVE' ? (
+                        <button
+                            onClick={async () => {
+                                if (window.confirm('Are you sure you want to stop the queue? Patients will be notified.')) {
+                                    try {
+                                        await api.post('/queue/stop');
+                                        setQueueStatus('STOPPED');
+                                        alert('Queue has been stopped.');
+                                    } catch (err) {
+                                        alert('Failed to stop queue');
+                                    }
+                                }
+                            }}
+                            className="py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-medium border border-red-200 flex items-center justify-center gap-2"
+                        >
+                            <AlertCircle size={20} />
+                            Stop Queue
+                        </button>
+                    ) : (
+                        <button
+                            onClick={async () => {
+                                try {
+                                    await api.post('/queue/start');
+                                    setQueueStatus('ACTIVE');
+                                    alert('Queue has been resumed.');
+                                } catch (err) {
+                                    alert('Failed to resume queue');
+                                }
+                            }}
+                            className="py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 font-medium border border-green-200 flex items-center justify-center gap-2"
+                        >
+                            <CheckCircle size={20} />
+                            Resume Queue
+                        </button>
+                    )}
+                </div>
             )}
 
             {/* Queue List */}

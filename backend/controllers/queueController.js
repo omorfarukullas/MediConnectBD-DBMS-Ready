@@ -45,14 +45,14 @@ const getTodayQueue = async (req, res) => {
             WHERE a.doctor_id = ? 
             AND a.appointment_date = ?
             AND a.status != 'CANCELLED'
-            ORDER BY aq.queue_number ASC`,
+            ORDER BY a.appointment_time ASC, aq.queue_number ASC`,
             [doctorId, today]
         );
 
         // Calculate queue statistics
         const stats = {
             total: appointments.length,
-            waiting: appointments.filter(a => a.status === 'PENDING').length,
+            waiting: appointments.filter(a => a.status === 'PENDING' || a.status === 'CONFIRMED').length,
             inProgress: appointments.filter(a => a.status === 'IN_PROGRESS').length,
             completed: appointments.filter(a => a.status === 'COMPLETED').length
         };
@@ -105,7 +105,7 @@ const callNextPatient = async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
 
     try {
-        // Find next PENDING patient in queue
+        // Find next PENDING or CONFIRMED patient in queue
         const [nextPatients] = await pool.execute(
             `SELECT 
                 a.*,
@@ -114,11 +114,11 @@ const callNextPatient = async (req, res) => {
             FROM appointments a
             LEFT JOIN patients p ON a.patient_id = p.id
             LEFT JOIN appointment_queue aq ON a.id = aq.appointment_id
-            WHERE a.doctor_id = ?
+            WHERE a.doctor_id = ? 
             AND a.appointment_date = ?
-            AND a.status = 'PENDING'
+            AND a.status IN ('PENDING', 'CONFIRMED')
             AND aq.queue_number IS NOT NULL
-            ORDER BY aq.queue_number ASC
+            ORDER BY a.appointment_time ASC, aq.queue_number ASC
             LIMIT 1`,
             [doctorId, today]
         );
@@ -133,21 +133,7 @@ const callNextPatient = async (req, res) => {
 
         const nextPatient = nextPatients[0];
 
-        // Emit WebSocket event if io is available
-        const io = req.app.get('io');
-        if (io) {
-            io.to(`doctor-${doctorId}`).emit('queue:next', {
-                appointmentId: nextPatient.id,
-                queueNumber: nextPatient.queue_number,
-                patientName: nextPatient.patient_name
-            });
 
-            io.to(`patient-${nextPatient.patient_id}`).emit('queue:called', {
-                appointmentId: nextPatient.id,
-                queueNumber: nextPatient.queue_number,
-                message: 'You have been called! Please proceed to the doctor.'
-            });
-        }
 
         res.json({
             success: true,
@@ -218,19 +204,7 @@ const startAppointment = async (req, res) => {
             [appointmentId]
         );
 
-        // Emit WebSocket event
-        const io = req.app.get('io');
-        if (io) {
-            io.to(`doctor-${doctorId}`).emit('queue:update', {
-                appointmentId,
-                status: 'IN_PROGRESS'
-            });
 
-            io.to(`patient-${appointment.patient_id}`).emit('appointment:started', {
-                appointmentId,
-                message: 'Your appointment has started'
-            });
-        }
 
         res.json({
             success: true,
@@ -293,19 +267,7 @@ const completeAppointment = async (req, res) => {
             [appointmentId]
         );
 
-        // Emit WebSocket event
-        const io = req.app.get('io');
-        if (io) {
-            io.to(`doctor-${doctorId}`).emit('queue:update', {
-                appointmentId,
-                status: 'COMPLETED'
-            });
 
-            io.to(`patient-${appointment.patient_id}`).emit('appointment:completed', {
-                appointmentId,
-                message: 'Your appointment has been completed'
-            });
-        }
 
         res.json({
             success: true,
@@ -346,7 +308,7 @@ const getMyPosition = async (req, res) => {
             LEFT JOIN doctors d ON a.doctor_id = d.id
             WHERE a.patient_id = ?
             AND a.appointment_date = ?
-            AND a.status IN ('PENDING', 'IN_PROGRESS')
+            AND a.status IN ('PENDING', 'IN_PROGRESS', 'CONFIRMED')
             ORDER BY a.appointment_time ASC
             LIMIT 1`,
             [patientId, today]
@@ -369,9 +331,19 @@ const getMyPosition = async (req, res) => {
             JOIN appointment_queue aq ON a.id = aq.appointment_id
             WHERE a.doctor_id = ?
             AND a.appointment_date = ?
-            AND aq.queue_number < ?
-            AND a.status = 'PENDING'`,
-            [myAppointment.doctor_id, today, myAppointment.queue_number]
+            AND a.status IN ('PENDING', 'CONFIRMED')
+            AND (
+                (a.appointment_time < ?) 
+                OR 
+                (a.appointment_time = ? AND aq.queue_number < ?)
+            )`,
+            [
+                myAppointment.doctor_id,
+                today,
+                myAppointment.appointment_time,
+                myAppointment.appointment_time,
+                myAppointment.queue_number
+            ]
         );
 
         const patientsAhead = ahead[0].count;
@@ -437,16 +409,26 @@ const getQueueStatus = async (req, res) => {
 
         // Calculate patients ahead
         let patients_before = 0;
-        if (appointment.status === 'PENDING' && appointment.queue_number) {
+        if ((appointment.status === 'PENDING' || appointment.status === 'CONFIRMED') && appointment.queue_number) {
             const [ahead] = await pool.execute(
                 `SELECT COUNT(*) as count
                 FROM appointments a
                 JOIN appointment_queue aq ON a.id = aq.appointment_id
                 WHERE a.doctor_id = ?
                 AND a.appointment_date = ?
-                AND aq.queue_number < ?
-                AND a.status = 'PENDING'`,
-                [appointment.doctor_id, today, appointment.queue_number]
+                AND a.status IN ('PENDING', 'CONFIRMED')
+                AND (
+                    (a.appointment_time < ?) 
+                    OR 
+                    (a.appointment_time = ? AND aq.queue_number < ?)
+                )`,
+                [
+                    appointment.doctor_id,
+                    today,
+                    appointment.appointment_time,
+                    appointment.appointment_time,
+                    appointment.queue_number
+                ]
             );
             patients_before = ahead[0].count;
         }
@@ -481,11 +463,63 @@ const getQueueStatus = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Stop/Pause the queue
+ * @route   POST /api/queue/stop
+ * @access  Private (Doctor)
+ */
+const stopQueue = async (req, res) => {
+    const doctorId = req.user.profile_id;
+
+    try {
+
+
+        res.json({
+            success: true,
+            message: 'Queue stopped successfully'
+        });
+    } catch (error) {
+        console.error('❌ Error stopping queue:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to stop queue',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * @desc    Resume/Start the queue
+ * @route   POST /api/queue/start
+ * @access  Private (Doctor)
+ */
+const resumeQueue = async (req, res) => {
+    const doctorId = req.user.profile_id;
+
+    try {
+
+
+        res.json({
+            success: true,
+            message: 'Queue resumed successfully'
+        });
+    } catch (error) {
+        console.error('❌ Error resuming queue:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to resume queue',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getTodayQueue,
     callNextPatient,
     startAppointment,
     completeAppointment,
     getMyPosition,
-    getQueueStatus
+    getQueueStatus,
+    stopQueue,
+    resumeQueue
 };

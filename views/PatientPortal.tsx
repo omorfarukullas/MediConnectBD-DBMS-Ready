@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Video, Calendar, Clock, AlertCircle, ArrowLeft, Filter, CheckCircle, User, Star, Activity, ChevronRight, AlertTriangle, Settings, Bell, Lock, Globe, Save, Mail, Phone, Shield, LogOut, ChevronLeft, GraduationCap, Languages, Menu, FileText, Home } from 'lucide-react';
+import { Search, MapPin, Video, Calendar, Clock, AlertCircle, ArrowLeft, Filter, CheckCircle, User, Star, Activity, ChevronRight, AlertTriangle, Settings, Bell, Lock, Globe, Save, Mail, Phone, Shield, LogOut, ChevronLeft, GraduationCap, Languages, Menu, FileText, Home, Building2 } from 'lucide-react';
 import { MOCK_VITALS } from '../constants';
 import { Doctor, Appointment, AppointmentStatus, User as UserType } from '../types';
 import { Button, Card, Badge, Modal } from '../components/UIComponents';
@@ -15,19 +15,20 @@ import QueuePositionTracker from '../components/QueuePositionTracker';
 import { socketService } from '../services/socketService';
 import { PatientVitalsManager } from '../components/PatientVitalsManager';
 import { SlotBookingModal } from '../components/SlotBookingModal';
+import { HospitalResourcesView } from '../components/HospitalResourcesView';
 
 interface PatientPortalProps {
   currentUser?: UserType;
   onNavigate: (view: string) => void;
   onBack: () => void;
-  initialMode?: 'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY';
+  initialMode?: 'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES';
 }
 
 export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNavigate, onBack, initialMode = 'DASHBOARD' }) => {
   console.log('🎯 PatientPortal component rendering...', { currentUser, initialMode });
 
   // View State
-  const [viewMode, setViewMode] = useState<'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY'>(initialMode);
+  const [viewMode, setViewMode] = useState<'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES'>(initialMode);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Data Loading State
@@ -561,6 +562,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
           <SidebarItem view="DASHBOARD" icon={<Home size={18} />} label="Find Doctor" />
           <SidebarItem view="MY_APPOINTMENTS" icon={<Calendar size={18} />} label="My Appointments" />
           <SidebarItem view="MEDICAL_HISTORY" icon={<FileText size={18} />} label="Medical History" />
+          <SidebarItem view="HOSPITAL_RESOURCES" icon={<Building2 size={18} />} label="Hospital Resources" />
           <SidebarItem view="SETTINGS" icon={<Settings size={18} />} label="Settings" />
         </nav>
         <div className="p-4 border-t border-slate-100">
@@ -591,7 +593,8 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
               <h2 className="text-xl md:text-2xl font-bold text-slate-900">
                 {viewMode === 'DASHBOARD' ? 'Find Doctor' :
                   viewMode === 'MY_APPOINTMENTS' ? 'My Appointments' :
-                    viewMode === 'MEDICAL_HISTORY' ? 'Medical Records' : 'Settings'}
+                    viewMode === 'MEDICAL_HISTORY' ? 'Medical Records' :
+                      viewMode === 'HOSPITAL_RESOURCES' ? 'Hospital Resources' : 'Settings'}
               </h2>
             </div>
           </div>
@@ -615,6 +618,13 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                 </Button>
               </div>
               <PatientMedicalHistory />
+            </div>
+          )}
+
+          {/* --- VIEW: HOSPITAL RESOURCES --- */}
+          {viewMode === 'HOSPITAL_RESOURCES' && (
+            <div className="animate-fade-in">
+              <HospitalResourcesView />
             </div>
           )}
 
@@ -895,8 +905,13 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                             <div>
                               <h3 className={`font-bold text-lg transition-colors ${appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-primary-600'}`}>{apt.doctorName}</h3>
                               <div className="text-sm text-slate-500 space-y-1">
-                                <p className="flex items-center gap-2"><Calendar size={14} /> {apt.date}</p>
+                                <p className="flex items-center gap-2"><Calendar size={14} /> {new Date(apt.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>
                                 <p className="flex items-center gap-2"><Clock size={14} /> {apt.time}</p>
+                                {apt.queueNumber && (
+                                  <p className="flex items-center gap-2 text-primary-600 font-bold">
+                                    <span className="bg-primary-50 px-2 py-0.5 rounded text-xs border border-primary-100">Queue #{apt.queueNumber}</span>
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>

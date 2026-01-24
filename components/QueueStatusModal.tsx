@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { X, Clock, Users, MapPin, TrendingUp } from 'lucide-react';
 import { Button, Card } from './UIComponents';
 import { api } from '../services/apiClient';
-import { socketService } from '../services/socketService';
 
 interface QueueStatusModalProps {
   appointmentId: number;
@@ -30,38 +29,12 @@ const QueueStatusModal: React.FC<QueueStatusModalProps> = ({ appointmentId, onCl
 
   useEffect(() => {
     loadQueueStatus();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(loadQueueStatus, 30000);
-
-    // WebSocket listener for real-time updates
-    if (socketService.isConnected()) {
-      socketService.on('queue:update', handleQueueUpdate);
-      socketService.on('queue:called', handleQueueCalled);
-    }
-
-    return () => {
-      clearInterval(interval);
-      if (socketService.isConnected()) {
-        socketService.off('queue:update');
-        socketService.off('queue:called');
-      }
-    };
+    // Poll every 5 seconds for near real-time updates without WebSockets
+    const interval = setInterval(loadQueueStatus, 5000);
+    return () => clearInterval(interval);
   }, [appointmentId]);
 
-  const handleQueueUpdate = (data: any) => {
-    // Refresh if our appointment is updated
-    if (data.appointmentId === appointmentId) {
-      loadQueueStatus();
-    }
-  };
 
-  const handleQueueCalled = (data: any) => {
-    if (data.appointmentId === appointmentId) {
-      loadQueueStatus();
-      showNotification(data.message || 'Your turn! The doctor is calling you now.');
-    }
-  };
 
   const showNotification = (message: string) => {
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -74,9 +47,24 @@ const QueueStatusModal: React.FC<QueueStatusModalProps> = ({ appointmentId, onCl
 
   const loadQueueStatus = async () => {
     try {
+      console.log('🔄 Fetching queue status for appointment:', appointmentId);
       const response = await api.get(`/queue/patient/${appointmentId}`);
-      setQueueStatus(response.data);
-      setLastUpdate(new Date());
+      console.log('✅ Queue status fetched:', response);
+
+      // ApiService wrapper returns { data: ... }
+      // Backend returns { success: true, data: ... }
+      // So we need response.data.data
+      const jsonBody = response.data || response;
+      const queueData = jsonBody.data || jsonBody;
+
+      console.log('📦 Processed Queue Data:', queueData);
+
+      if (queueData) {
+        setQueueStatus(queueData);
+        setLastUpdate(new Date());
+      } else {
+        console.warn('⚠️ Received empty data for queue status');
+      }
     } catch (error) {
       console.error('Error loading queue status:', error);
     } finally {
@@ -87,12 +75,15 @@ const QueueStatusModal: React.FC<QueueStatusModalProps> = ({ appointmentId, onCl
   const getStatusInfo = (status: string) => {
     switch (status) {
       case 'waiting':
+      case 'confirmed':
+      case 'pending':
         return {
           color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
           icon: <Clock className="w-5 h-5" />,
           text: 'Waiting in Queue'
         };
       case 'in_progress':
+      case 'accepted':
         return {
           color: 'bg-green-100 text-green-800 border-green-300',
           icon: <Users className="w-5 h-5" />,
@@ -108,24 +99,30 @@ const QueueStatusModal: React.FC<QueueStatusModalProps> = ({ appointmentId, onCl
         return {
           color: 'bg-gray-100 text-gray-600 border-gray-300',
           icon: <Clock className="w-5 h-5" />,
-          text: 'Unknown Status'
+          text: `Status: ${status}`
         };
     }
   };
 
   const formatEstimatedTime = (estimatedTime: string) => {
-    if (!estimatedTime) return 'N/A';
-    const date = new Date(estimatedTime);
-    const now = new Date();
-    const diff = date.getTime() - now.getTime();
-    const minutes = Math.floor(diff / 60000);
+    if (!estimatedTime || estimatedTime === 'Invalid Date') return 'N/A';
+    try {
+      const date = new Date(estimatedTime);
+      if (isNaN(date.getTime())) return 'N/A';
 
-    if (minutes < 0) return 'Soon';
-    if (minutes === 0) return 'Now';
-    if (minutes < 60) return `${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}h ${mins}m`;
+      const now = new Date();
+      const diff = date.getTime() - now.getTime();
+      const minutes = Math.floor(diff / 60000);
+
+      if (minutes < 0) return 'Soon';
+      if (minutes === 0) return 'Now';
+      if (minutes < 60) return `${minutes} min`;
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours}h ${mins}m`;
+    } catch (e) {
+      return 'N/A';
+    }
   };
 
   return (

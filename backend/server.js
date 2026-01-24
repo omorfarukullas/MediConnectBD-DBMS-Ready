@@ -24,6 +24,7 @@ const queueRoutes = require('./routes/queueRoutes');
 const slotRoutes = require('./routes/slotRoutes');
 const hospitalAdminRoutes = require('./routes/hospitalAdminRoutes');
 const superAdminRoutes = require('./routes/superAdminRoutes');
+const hospitalRoutes = require('./routes/hospitalRoutes');
 console.log('✅ All routes loaded');
 
 dotenv.config();
@@ -52,7 +53,9 @@ app.use(cors({
         const allowedOrigins = [
             'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003',
             'http://127.0.0.1:3000', 'http://127.0.0.1:3001', 'http://127.0.0.1:3002', 'http://127.0.0.1:5173',
-            'http://localhost:5173'
+            'http://localhost:5173',
+            'http://192.168.1.6:3000', // Allow specific LAN IP
+            'http://192.168.1.6:5173'
         ];
 
         if (allowedOrigins.indexOf(origin) !== -1 || true) { // TEMPORARY: Allow all for debugging
@@ -97,6 +100,8 @@ app.use('/api/vitals', require('./routes/vitalsRoutes'));
 app.use('/api/slots', slotRoutes);
 // Hospital Admin routes (resource management)
 app.use('/api/hospital-admin', hospitalAdminRoutes);
+// Public Hospital routes (for patients to view hospitals and resources)
+app.use('/api/hospitals', hospitalRoutes);
 // Super Admin routes (system-wide administration)
 app.use('/api/super-admin', superAdminRoutes);
 

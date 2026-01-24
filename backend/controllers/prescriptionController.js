@@ -12,41 +12,57 @@ const pool = require('../config/db');
  */
 const createPrescription = async (req, res) => {
   const { patientId, appointmentId, diagnosis, medicines } = req.body;
-  const doctorId = req.user.id;
+  const doctorId = req.user.profile_id || req.user.id; // Use profile_id for doctors
 
   try {
     // Validate required fields
-    if (!patientId || !diagnosis || !medicines || !Array.isArray(medicines)) {
-      return res.status(400).json({ 
-        message: 'Please provide patientId, diagnosis, and medicines array' 
+    if (!patientId || !medicines || !Array.isArray(medicines)) {
+      return res.status(400).json({
+        message: 'Please provide patientId and medicines array'
       });
     }
 
     // Validate medicines array
     if (medicines.length === 0) {
-      return res.status(400).json({ 
-        message: 'At least one medicine is required' 
+      return res.status(400).json({
+        message: 'At least one medicine is required'
       });
     }
 
     // Validate each medicine has required fields
     for (const med of medicines) {
-      if (!med.name || !med.dosage || !med.duration || !med.instruction) {
-        return res.status(400).json({ 
-          message: 'Each medicine must have name, dosage, duration, and instruction' 
+      if (!med.name || !med.dosage) {
+        return res.status(400).json({
+          message: 'Each medicine must have at least name and dosage'
         });
       }
     }
 
-    // Insert prescription with public visibility by default
-    const [result] = await pool.execute(
-      `INSERT INTO prescriptions 
-       (patient_id, doctor_id, appointment_id, diagnosis, medicines, visibility, created_at) 
-       VALUES (?, ?, ?, ?, ?, 'public', NOW())`,
-      [patientId, doctorId, appointmentId || null, diagnosis, JSON.stringify(medicines)]
-    );
+    // Note: Schema columns are: id, patient_id, doctor_id, appointment_id, medication_name, dosage, frequency, duration, instructions, visibility, created_at
+    // The table stores ONE medicine per row, not JSON array
+    // For multiple medicines, we create multiple prescription rows
 
-    const prescriptionId = result.insertId;
+    const prescriptionIds = [];
+
+    for (const medicine of medicines) {
+      const [result] = await pool.execute(
+        `INSERT INTO prescriptions 
+         (patient_id, doctor_id, appointment_id, medication_name, dosage, frequency, duration, instructions, visibility, created_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          patientId,
+          doctorId,
+          appointmentId || null,
+          medicine.name,
+          medicine.dosage,
+          medicine.frequency || 'As directed',
+          medicine.duration || 'Not specified',
+          medicine.instruction || 'Take as prescribed',
+          'PUBLIC' // Default to PUBLIC (uppercase to match ENUM)
+        ]
+      );
+      prescriptionIds.push(result.insertId);
+    }
 
     // Get doctor name for response
     const [doctors] = await pool.execute(
@@ -57,21 +73,20 @@ const createPrescription = async (req, res) => {
     res.status(201).json({
       message: 'Prescription created successfully',
       prescription: {
-        id: prescriptionId,
+        ids: prescriptionIds,
         patientId,
         doctorId,
         doctorName: doctors[0]?.full_name || 'Unknown',
         appointmentId,
-        diagnosis,
-        medicines,
+        medicineCount: medicines.length,
         createdAt: new Date().toISOString()
       }
     });
   } catch (error) {
     console.error('Error creating prescription:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error creating prescription',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -132,9 +147,9 @@ const getPrescriptions = async (req, res) => {
     res.json(formattedPrescriptions);
   } catch (error) {
     console.error('Error fetching prescriptions:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error fetching prescriptions',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -161,11 +176,11 @@ const getPatientPrescriptions = async (req, res) => {
         'SELECT share_medical_history FROM patients WHERE id = ?',
         [patientId]
       );
-      
+
       if (patientSettings.length === 0) {
         return res.status(404).json({ message: 'Patient not found' });
       }
-      
+
       // If patient has disabled sharing medical history, return empty array
       if (!patientSettings[0].share_medical_history) {
         console.log(`🔒 Patient ${patientId} has disabled medical history sharing`);
@@ -173,41 +188,50 @@ const getPatientPrescriptions = async (req, res) => {
       }
     }
 
-    // For doctors, filter only public prescriptions
+    // For doctors, filter only PUBLIC prescriptions
     let query = `SELECT p.*, d.full_name as doctor_name
        FROM prescriptions p
        LEFT JOIN doctors d ON p.doctor_id = d.id
        WHERE p.patient_id = ?`;
-    
-    // Doctors can only see public prescriptions
+
+    // Doctors can only see PUBLIC prescriptions (uppercase to match ENUM)
     if (userRole === 'DOCTOR') {
-      query += ' AND (p.visibility = "public" OR p.visibility IS NULL)';
+      query += ' AND p.visibility = "PUBLIC"';
     }
-    
+
     query += ' ORDER BY p.created_at DESC';
 
     const [prescriptions] = await pool.execute(query, [patientId]);
 
-    // Parse medicines JSON with null safety
+    // Format prescriptions - schema has individual columns, not JSON
+    // Columns: medication_name, dosage, frequency, duration, instructions
     const formattedPrescriptions = prescriptions.map(p => ({
       id: p.id,
       patientId: p.patient_id,
       doctorId: p.doctor_id,
       doctorName: p.doctor_name,
       appointmentId: p.appointment_id,
-      diagnosis: p.diagnosis,
-      medicines: p.medicines ? JSON.parse(p.medicines) : [],
+      diagnosis: p.instructions || 'No specific diagnosis recorded',
+      medicines: [
+        {
+          name: p.medication_name || 'Medication',
+          dosage: p.dosage || 'As prescribed',
+          duration: p.duration || 'Not specified',
+          instruction: p.frequency || 'As directed'
+        }
+      ],
       date: p.created_at,
       createdAt: p.created_at,
-      updatedAt: p.updated_at
+      updatedAt: p.updated_at,
+      visibility: p.visibility
     }));
 
     res.json(formattedPrescriptions);
   } catch (error) {
     console.error('Error fetching patient prescriptions:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error fetching prescriptions',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -254,15 +278,15 @@ const updatePrescriptionVisibility = async (req, res) => {
       [visibility, id]
     );
 
-    res.json({ 
+    res.json({
       message: 'Prescription visibility updated successfully',
-      visibility 
+      visibility
     });
   } catch (error) {
     console.error('Error updating prescription visibility:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error updating visibility',
-      error: error.message 
+      error: error.message
     });
   }
 };

@@ -5,7 +5,8 @@
  */
 
 // Ensure the API URL is correctly set - backend runs on port 5000
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Use window.location.hostname to support LAN access (e.g. 192.168.x.x)
+const API_BASE_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`;
 
 console.log('🌐 API Client initialized with base URL:', API_BASE_URL);
 console.log('🔍 Environment check:', {
@@ -380,8 +381,8 @@ class ApiService {
     return this.http.delete(`/documents/${id}`);
   }
 
-  async updateDocumentPrivacy(documentId: number, isPrivate: boolean) {
-    return this.http.patch(`/documents/${documentId}/privacy`, { isPrivate });
+  async updateDocumentVisibility(documentId: number, visibility: 'private' | 'public') {
+    return this.http.patch(`/documents/${documentId}/visibility`, { visibility });
   }
 
   async downloadDocument(documentId: number): Promise<Blob> {
@@ -422,10 +423,193 @@ class ApiService {
     return this.http.get(`/prescriptions/patient/${patientId}`);
   }
 
+  async updatePrescriptionVisibility(prescriptionId: number, visibility: 'private' | 'public') {
+    return this.http.patch(`/prescriptions/${prescriptionId}/visibility`, { visibility });
+  }
+
   // ==================== Health Check ====================
 
   async healthCheck() {
     return this.http.get('/health');
+  }
+
+  // ==================== Hospital Admin Methods ====================
+
+  // Hospital Info
+  async getHospitalDetails() {
+    return this.http.get('/hospital-admin/hospital');
+  }
+
+  // Doctor Management
+  async getHospitalDoctors() {
+    return this.http.get('/hospital-admin/doctors');
+  }
+
+  async addDoctor(doctorData: {
+    email: string;
+    password: string;
+    name: string;
+    specialization: string;
+    consultation_fee: number;
+    experience_years: number;
+  }) {
+    return this.http.post('/hospital-admin/doctors', doctorData);
+  }
+
+  async updateDoctor(doctorId: number, doctorData: {
+    name?: string;
+    specialization?: string;
+    consultation_fee?: number;
+    experience_years?: number;
+    phone?: string;
+    bio?: string;
+  }) {
+    return this.http.put(`/hospital-admin/doctors/${doctorId}`, doctorData);
+  }
+
+  async deleteDoctor(doctorId: number) {
+    return this.http.delete(`/hospital-admin/doctors/${doctorId}`);
+  }
+
+  async getDoctorAppointments(doctorId: number, params?: { startDate?: string; endDate?: string }) {
+    const queryString = params
+      ? `?${new URLSearchParams(params as any).toString()}`
+      : '';
+    return this.http.get(`/hospital-admin/doctors/${doctorId}/appointments${queryString}`);
+  }
+
+  // Resources Management
+  async getHospitalResources() {
+    return this.http.get('/hospital-admin/resources');
+  }
+
+  async addResource(resourceData: {
+    resource_type: 'ICU' | 'CCU' | 'CABIN' | 'GENERAL_WARD';
+    total_capacity: number;
+    available: number;
+  }) {
+    return this.http.post('/hospital-admin/resources', resourceData);
+  }
+
+  async updateResource(resourceId: number, resourceData: {
+    available: number;
+    total_capacity: number;
+  }) {
+    return this.http.put(`/hospital-admin/resources/${resourceId}`, resourceData);
+  }
+
+  // Departments Management
+  async addDepartment(departmentData: {
+    name: string;
+    description?: string;
+  }) {
+    return this.http.post('/hospital-admin/departments', departmentData);
+  }
+
+  async updateDepartment(departmentId: number, departmentData: {
+    name?: string;
+    description?: string;
+    is_active?: boolean;
+  }) {
+    return this.http.put(`/hospital-admin/departments/${departmentId}`, departmentData);
+  }
+
+  // Tests Management
+  async addTest(testData: {
+    department_id: number;
+    name: string;
+    description?: string;
+    cost: number;
+    duration_minutes?: number;
+  }) {
+    return this.http.post('/hospital-admin/tests', testData);
+  }
+
+  async updateTest(testId: number, testData: {
+    name?: string;
+    description?: string;
+    cost?: number;
+    duration_minutes?: number;
+    is_available?: boolean;
+  }) {
+    return this.http.put(`/hospital-admin/tests/${testId}`, testData);
+  }
+
+  async deleteTest(testId: number) {
+    return this.http.delete(`/hospital-admin/tests/${testId}`);
+  }
+
+  // Ambulance Management
+  async getAmbulances() {
+    const resources = await this.getHospitalResources();
+    // @ts-ignore - ambulances is part of resources response
+    return resources.ambulances || [];
+  }
+
+  async addAmbulance(ambulanceData: {
+    vehicle_number: string;
+    driver_name: string;
+    driver_phone: string;
+    ambulance_type: 'BASIC' | 'ADVANCED' | 'ICU';
+  }) {
+    return this.http.post('/hospital-admin/ambulances', ambulanceData);
+  }
+
+  async updateAmbulance(ambulanceId: number, ambulanceData: {
+    status: 'AVAILABLE' | 'BUSY' | 'MAINTENANCE';
+  }) {
+    return this.http.put(`/hospital-admin/ambulances/${ambulanceId}`, ambulanceData);
+  }
+
+  async deleteAmbulance(ambulanceId: number) {
+    return this.http.delete(`/hospital-admin/ambulances/${ambulanceId}`);
+  }
+
+  // Monitoring
+  async getHospitalAppointments() {
+    return this.http.get('/hospital-admin/appointments');
+  }
+
+  async getHospitalQueue() {
+    return this.http.get('/hospital-admin/queue');
+  }
+
+  // Doctor Schedule Management
+  async getDoctorSlots(doctorId: number) {
+    return this.http.get<any[]>(`/hospital-admin/doctors/${doctorId}/slots`);
+  }
+
+  async getAllDoctorSchedules() {
+    return this.http.get<any[]>('/hospital-admin/schedules');
+  }
+
+  async addDoctorSlot(doctorId: number, slotData: {
+    day_of_week: string;
+    start_time: string;
+    end_time: string;
+    max_patients: number;
+    consultation_duration: number;
+  }) {
+    return this.http.post(`/hospital-admin/doctors/${doctorId}/slots`, slotData);
+  }
+
+  async updateDoctorSlot(slotId: number, slotData: {
+    day_of_week?: string;
+    start_time?: string;
+    end_time?: string;
+    max_patients?: number;
+    consultation_duration?: number;
+    is_active?: boolean;
+  }) {
+    return this.http.put(`/hospital-admin/slots/${slotId}`, slotData);
+  }
+
+  async deleteDoctorSlot(slotId: number) {
+    return this.http.delete(`/hospital-admin/slots/${slotId}`);
+  }
+
+  async toggleSlotStatus(slotId: number) {
+    return this.http.patch(`/hospital-admin/slots/${slotId}/toggle`, {});
   }
 
   // ==================== Generic Methods ====================

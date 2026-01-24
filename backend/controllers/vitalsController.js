@@ -5,170 +5,108 @@ const pool = require('../config/db');
  * @route   GET /api/vitals
  * @access  Private (Patient)
  */
+/**
+ * @desc    Get patient vitals
+ * @route   GET /api/vitals
+ * @access  Private (Patient)
+ */
 const getVitals = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const patientId = req.user.profile_id || req.user.id;
 
-        const [vitals] = await pool.execute(
+        const [patients] = await pool.execute(
             `SELECT 
                 id,
                 blood_group,
                 height,
                 weight,
-                blood_pressure,
-                heart_rate,
-                temperature,
-                oxygen_saturation,
-                allergies,
-                chronic_conditions,
-                current_medications,
-                emergency_contact_name,
-                emergency_contact_phone,
-                last_updated
-            FROM patient_vitals 
-            WHERE user_id = ?`,
-            [userId]
+                full_name,
+                phone,
+                address,
+                date_of_birth,
+                updated_at as last_updated
+            FROM patients 
+            WHERE id = ?`,
+            [patientId]
         );
 
-        if (vitals.length === 0) {
+        if (patients.length === 0) {
             return res.json({ vitals: null });
         }
 
-        res.json({ vitals: vitals[0] });
+        res.json({ vitals: patients[0] });
     } catch (error) {
         console.error('Get vitals error:', error);
-        res.status(500).json({ message: 'Server error while fetching vitals' });
+        res.status(500).json({ message: 'Server error while fetching vitals', error: error.message });
     }
 };
 
 /**
- * @desc    Update or create patient vitals
+ * @desc    Update patient vitals
  * @route   PUT /api/vitals
  * @access  Private (Patient)
  */
 const updateVitals = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const patientId = req.user.profile_id || req.user.id;
         const {
             blood_group,
             height,
             weight,
-            blood_pressure,
-            heart_rate,
-            temperature,
-            oxygen_saturation,
-            allergies,
-            chronic_conditions,
-            current_medications,
-            emergency_contact_name,
-            emergency_contact_phone
+            full_name,
+            phone,
+            address,
+            date_of_birth
         } = req.body;
 
-        // Check if vitals exist
-        const [existing] = await pool.execute(
-            'SELECT id FROM patient_vitals WHERE user_id = ?',
-            [userId]
+        // Update patients table with vitals and profile info
+        await pool.execute(
+            `UPDATE patients SET
+                blood_group = COALESCE(?, blood_group),
+                height = COALESCE(?, height),
+                weight = COALESCE(?, weight),
+                full_name = COALESCE(?, full_name),
+                phone = COALESCE(?, phone),
+                address = COALESCE(?, address),
+                date_of_birth = COALESCE(?, date_of_birth),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`,
+            [
+                blood_group,
+                height,
+                weight,
+                full_name,
+                phone,
+                address,
+                date_of_birth,
+                patientId
+            ]
         );
 
-        if (existing.length > 0) {
-            // Update existing vitals
-            await pool.execute(
-                `UPDATE patient_vitals SET
-                    blood_group = COALESCE(?, blood_group),
-                    height = COALESCE(?, height),
-                    weight = COALESCE(?, weight),
-                    blood_pressure = COALESCE(?, blood_pressure),
-                    heart_rate = COALESCE(?, heart_rate),
-                    temperature = COALESCE(?, temperature),
-                    oxygen_saturation = COALESCE(?, oxygen_saturation),
-                    allergies = COALESCE(?, allergies),
-                    chronic_conditions = COALESCE(?, chronic_conditions),
-                    current_medications = COALESCE(?, current_medications),
-                    emergency_contact_name = COALESCE(?, emergency_contact_name),
-                    emergency_contact_phone = COALESCE(?, emergency_contact_phone),
-                    last_updated = CURRENT_TIMESTAMP
-                WHERE user_id = ?`,
-                [
-                    blood_group,
-                    height,
-                    weight,
-                    blood_pressure,
-                    heart_rate,
-                    temperature,
-                    oxygen_saturation,
-                    allergies,
-                    chronic_conditions,
-                    current_medications,
-                    emergency_contact_name,
-                    emergency_contact_phone,
-                    userId
-                ]
-            );
-        } else {
-            // Create new vitals record
-            await pool.execute(
-                `INSERT INTO patient_vitals (
-                    user_id,
-                    blood_group,
-                    height,
-                    weight,
-                    blood_pressure,
-                    heart_rate,
-                    temperature,
-                    oxygen_saturation,
-                    allergies,
-                    chronic_conditions,
-                    current_medications,
-                    emergency_contact_name,
-                    emergency_contact_phone
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    userId,
-                    blood_group,
-                    height,
-                    weight,
-                    blood_pressure,
-                    heart_rate,
-                    temperature,
-                    oxygen_saturation,
-                    allergies,
-                    chronic_conditions,
-                    current_medications,
-                    emergency_contact_name,
-                    emergency_contact_phone
-                ]
-            );
-        }
-
         // Fetch updated vitals
-        const [updatedVitals] = await pool.execute(
+        const [updatedPatient] = await pool.execute(
             `SELECT 
                 id,
                 blood_group,
                 height,
                 weight,
-                blood_pressure,
-                heart_rate,
-                temperature,
-                oxygen_saturation,
-                allergies,
-                chronic_conditions,
-                current_medications,
-                emergency_contact_name,
-                emergency_contact_phone,
-                last_updated
-            FROM patient_vitals 
-            WHERE user_id = ?`,
-            [userId]
+                full_name,
+                phone,
+                address,
+                date_of_birth,
+                updated_at as last_updated
+            FROM patients 
+            WHERE id = ?`,
+            [patientId]
         );
 
         res.json({
             message: 'Vitals updated successfully',
-            vitals: updatedVitals[0]
+            vitals: updatedPatient[0]
         });
     } catch (error) {
         console.error('Update vitals error:', error);
-        res.status(500).json({ message: 'Server error while updating vitals' });
+        res.status(500).json({ message: 'Server error while updating vitals', error: error.message });
     }
 };
 

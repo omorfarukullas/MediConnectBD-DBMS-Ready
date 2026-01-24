@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
-  FileText, Download, Eye, EyeOff, Pill, Upload, Trash2, 
-  Lock, Unlock, AlertCircle, Calendar, User 
+import {
+  FileText, Download, Eye, EyeOff, Pill, Upload, Trash2,
+  Lock, Unlock, AlertCircle, Calendar, User
 } from 'lucide-react';
 import { Card, Button, Badge } from '../components/UIComponents';
 import { FileUpload } from '../components/FileUpload';
@@ -33,6 +33,7 @@ interface Prescription {
     duration: string;
     instruction: string;
   }>;
+  visibility?: string;
 }
 
 export const PatientMedicalHistory = () => {
@@ -41,6 +42,7 @@ export const PatientMedicalHistory = () => {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingPrivacy, setUpdatingPrivacy] = useState<number | null>(null);
+  const [updatingPrescriptionPrivacy, setUpdatingPrescriptionPrivacy] = useState<number | null>(null);
 
   useEffect(() => {
     fetchMedicalHistory();
@@ -49,7 +51,7 @@ export const PatientMedicalHistory = () => {
   const fetchMedicalHistory = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch all documents (including private ones - patient can see all)
       const docsData = await api.getDocuments();
       setDocuments(docsData);
@@ -66,20 +68,21 @@ export const PatientMedicalHistory = () => {
 
   /**
    * Toggle privacy setting for a document
-   * When isPrivate = true, doctors cannot see this document
-   * When isPrivate = false, doctors can view this document
+   * When visibility = 'private', doctors cannot see this document
+   * When visibility = 'public', doctors can view this document
    */
-  const toggleDocumentPrivacy = async (documentId: number, currentPrivacy: boolean) => {
+  const toggleDocumentPrivacy = async (documentId: number, currentVisibility: string) => {
     try {
       setUpdatingPrivacy(documentId);
-      
-      await api.updateDocumentPrivacy(documentId, !currentPrivacy);
-      
+
+      const newVisibility = currentVisibility === 'private' ? 'public' : 'private';
+      await api.updateDocumentVisibility(documentId, newVisibility);
+
       // Update local state
       setDocuments(prevDocs =>
         prevDocs.map(doc =>
           doc.id === documentId
-            ? { ...doc, isPrivate: !currentPrivacy }
+            ? { ...doc, isPrivate: newVisibility === 'private' }
             : doc
         )
       );
@@ -87,6 +90,31 @@ export const PatientMedicalHistory = () => {
       alert(error.response?.data?.message || 'Failed to update privacy setting');
     } finally {
       setUpdatingPrivacy(null);
+    }
+  };
+
+  /**
+   * Toggle privacy setting for a prescription
+   */
+  const togglePrescriptionPrivacy = async (prescriptionId: number, currentVisibility: string) => {
+    try {
+      setUpdatingPrescriptionPrivacy(prescriptionId);
+
+      const newVisibility = currentVisibility === 'private' ? 'public' : 'private';
+      await api.updatePrescriptionVisibility(prescriptionId, newVisibility);
+
+      // Update local state
+      setPrescriptions(prevPrescriptions =>
+        prevPrescriptions.map(presc =>
+          presc.id === prescriptionId
+            ? { ...presc, visibility: newVisibility }
+            : presc
+        )
+      );
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to update prescription privacy');
+    } finally {
+      setUpdatingPrescriptionPrivacy(null);
     }
   };
 
@@ -177,7 +205,7 @@ export const PatientMedicalHistory = () => {
           <div className="flex-1">
             <h3 className="font-semibold text-blue-900">Privacy Controls</h3>
             <p className="text-sm text-blue-700 mt-1">
-              Use the visibility toggle to control which documents your doctors can see. 
+              Use the visibility toggle to control which documents your doctors can see.
               Private documents are only visible to you.
             </p>
           </div>
@@ -189,11 +217,10 @@ export const PatientMedicalHistory = () => {
         <div className="flex gap-4">
           <button
             onClick={() => setActiveTab('PRESCRIPTIONS')}
-            className={`py-3 px-4 border-b-2 font-medium transition-colors ${
-              activeTab === 'PRESCRIPTIONS'
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
+            className={`py-3 px-4 border-b-2 font-medium transition-colors ${activeTab === 'PRESCRIPTIONS'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
           >
             <div className="flex items-center gap-2">
               <Pill size={18} />
@@ -202,11 +229,10 @@ export const PatientMedicalHistory = () => {
           </button>
           <button
             onClick={() => setActiveTab('DOCUMENTS')}
-            className={`py-3 px-4 border-b-2 font-medium transition-colors ${
-              activeTab === 'DOCUMENTS'
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
+            className={`py-3 px-4 border-b-2 font-medium transition-colors ${activeTab === 'DOCUMENTS'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
           >
             <div className="flex items-center gap-2">
               <FileText size={18} />
@@ -239,7 +265,7 @@ export const PatientMedicalHistory = () => {
                 prescriptions.map((prescription) => (
                   <Card key={prescription.id} className="p-5">
                     <div className="flex justify-between items-start mb-4">
-                      <div>
+                      <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <User className="text-primary-600" size={18} />
                           <p className="font-semibold text-slate-900">
@@ -254,6 +280,33 @@ export const PatientMedicalHistory = () => {
                             day: 'numeric'
                           })}
                         </div>
+                      </div>
+
+                      {/* Privacy Toggle for Prescription */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => togglePrescriptionPrivacy(
+                            prescription.id,
+                            prescription.visibility?.toLowerCase() || 'public'
+                          )}
+                          disabled={updatingPrescriptionPrivacy === prescription.id}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${prescription.visibility?.toLowerCase() === 'private'
+                              ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                              : 'bg-green-100 text-green-700 hover:bg-green-200'
+                            } ${updatingPrescriptionPrivacy === prescription.id ? 'opacity-50 cursor-wait' : ''}`}
+                        >
+                          {prescription.visibility?.toLowerCase() === 'private' ? (
+                            <>
+                              <Lock size={14} />
+                              Private
+                            </>
+                          ) : (
+                            <>
+                              <Unlock size={14} />
+                              Visible
+                            </>
+                          )}
+                        </button>
                       </div>
                     </div>
 
@@ -313,7 +366,7 @@ export const PatientMedicalHistory = () => {
                 <h3 className="font-semibold text-gray-900 text-lg">
                   My Documents & Reports
                 </h3>
-                
+
                 {documents.length === 0 ? (
                   <Card className="text-center py-12">
                     <FileText className="mx-auto text-gray-400 mb-3" size={48} />
@@ -359,11 +412,10 @@ export const PatientMedicalHistory = () => {
                             <button
                               onClick={() => toggleDocumentPrivacy(doc.id, doc.isPrivate)}
                               disabled={updatingPrivacy === doc.id}
-                              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                                doc.isPrivate
-                                  ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
-                              } ${updatingPrivacy === doc.id ? 'opacity-50 cursor-wait' : ''}`}
+                              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${doc.isPrivate
+                                ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                } ${updatingPrivacy === doc.id ? 'opacity-50 cursor-wait' : ''}`}
                             >
                               {doc.isPrivate ? (
                                 <>
@@ -377,7 +429,7 @@ export const PatientMedicalHistory = () => {
                                 </>
                               )}
                             </button>
-                            
+
                             {doc.isPrivate && (
                               <span className="text-xs text-gray-500 flex items-center gap-1">
                                 <AlertCircle size={12} />
@@ -396,7 +448,7 @@ export const PatientMedicalHistory = () => {
                               <Download size={16} />
                               Download
                             </Button>
-                            
+
                             <Button
                               onClick={() => handleDeleteDocument(doc.id)}
                               variant="outline"

@@ -52,4 +52,18 @@ router.get('/my-position', protect, restrictTo('PATIENT'), getMyPosition);
  */
 router.get('/patient/:appointmentId', protect, restrictTo('PATIENT'), getQueueStatus);
 
+/**
+ * @route   POST /api/queue/stop
+ * @desc    Stop/Pause the queue
+ * @access  Private (Doctor)
+ */
+router.post('/stop', protect, restrictTo('DOCTOR'), require('../controllers/queueController').stopQueue);
+
+/**
+ * @route   POST /api/queue/start
+ * @desc    Resume/Start the queue
+ * @access  Private (Doctor)
+ */
+router.post('/start', protect, restrictTo('DOCTOR'), require('../controllers/queueController').resumeQueue);
+
 module.exports = router;

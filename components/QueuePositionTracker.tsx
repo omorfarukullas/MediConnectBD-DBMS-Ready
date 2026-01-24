@@ -168,7 +168,7 @@ const QueuePositionTracker: React.FC = () => {
                     </div>
 
                     {/* Patients Ahead */}
-                    {position.status === 'PENDING' && (
+                    {(position.status === 'PENDING' || position.status === 'CONFIRMED') && (
                         <div className="flex items-center justify-between py-3 border-b border-gray-100">
                             <span className="text-gray-600">Patients Ahead</span>
                             <span className="font-semibold text-gray-900">
@@ -178,7 +178,7 @@ const QueuePositionTracker: React.FC = () => {
                     )}
 
                     {/* Estimated Wait Time */}
-                    {position.status === 'PENDING' && position.patientsAhead > 0 && (
+                    {(position.status === 'PENDING' || position.status === 'CONFIRMED') && position.patientsAhead > 0 && (
                         <div className="flex items-center justify-between py-3">
                             <span className="text-gray-600">Estimated Wait</span>
                             <div className="flex items-center space-x-2">
@@ -210,7 +210,7 @@ const QueuePositionTracker: React.FC = () => {
             </div>
 
             {/* Helpful Tips */}
-            {position.status === 'PENDING' && position.patientsAhead <= 2 && (
+            {(position.status === 'PENDING' || position.status === 'CONFIRMED') && position.patientsAhead <= 2 && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                     <p className="text-sm text-yellow-800">
                         <strong>💡 Tip:</strong> Please stay nearby. You'll be called soon!

@@ -20,16 +20,16 @@ class NotificationService {
     async createAndEmit(userId, notificationData) {
         try {
             // Create notification in database
+            // Schema: id, user_id, title, message, type, is_read, related_entity_type, related_entity_id, created_at
             const [result] = await pool.execute(
-                'INSERT INTO notifications (user_id, title, message, type, priority, related_id, related_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO notifications (user_id, title, message, type, related_entity_type, related_entity_id) VALUES (?, ?, ?, ?, ?, ?)',
                 [
                     userId,
                     notificationData.title,
                     notificationData.message,
                     notificationData.type || 'GENERAL',
-                    notificationData.priority || 'MEDIUM',
-                    notificationData.relatedId || null,
-                    notificationData.relatedType || null
+                    notificationData.relatedType || null,
+                    notificationData.relatedId || null
                 ]
             );
 

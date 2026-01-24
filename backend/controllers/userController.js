@@ -391,13 +391,60 @@ const updateUserProfile = async (req, res) => {
     }
 };
 
-// Placeholder for privacy settings (can be implemented later)
+/**
+ * @desc    Get patient privacy settings
+ * @route   GET /api/auth/privacy
+ * @access  Private (Patient only)
+ */
 const getPrivacySettings = async (req, res) => {
-    res.json({ shareHistory: true, visibleToSearch: true });
+    try {
+        const patientId = req.user.profile_id || req.user.id;
+
+        const [patients] = await pool.execute(
+            'SELECT share_medical_history FROM patients WHERE id = ?',
+            [patientId]
+        );
+
+        if (patients.length === 0) {
+            return res.status(404).json({ message: 'Patient not found' });
+        }
+
+        res.json({
+            shareMedicalHistory: patients[0].share_medical_history === 1
+        });
+    } catch (error) {
+        console.error('Get privacy settings error:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
 };
 
+/**
+ * @desc    Update patient privacy settings
+ * @route   PUT /api/auth/privacy
+ * @access  Private (Patient only)
+ */
 const updatePrivacySettings = async (req, res) => {
-    res.json({ message: 'Privacy settings updated successfully' });
+    try {
+        const patientId = req.user.profile_id || req.user.id;
+        const { shareMedicalHistory } = req.body;
+
+        if (typeof shareMedicalHistory !== 'boolean') {
+            return res.status(400).json({ message: 'shareMedicalHistory must be a boolean value' });
+        }
+
+        await pool.execute(
+            'UPDATE patients SET share_medical_history = ? WHERE id = ?',
+            [shareMedicalHistory ? 1 : 0, patientId]
+        );
+
+        res.json({
+            message: 'Privacy settings updated successfully',
+            shareMedicalHistory
+        });
+    } catch (error) {
+        console.error('Update privacy settings error:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
 };
 
 // @desc    Register a new doctor

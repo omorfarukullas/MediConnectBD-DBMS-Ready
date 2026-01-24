@@ -15,17 +15,22 @@ const uploadDocument = async (req, res) => {
             return res.status(400).json({ message: 'No file uploaded' });
         }
 
+        // Note: Schema columns are: id, patient_id, filename, filepath, document_type, description, visibility, uploaded_by_doctor_id, upload_date
+        // patient_id must reference patients table, so we use req.user.profile_id (patient ID) not req.user.id (user ID)
+        const patientId = req.user.profile_id || req.user.id; // profile_id for patients, fallback to id
+
+        // Normalize path for cross-platform compatibility
+        const normalizedPath = req.file.path.replace(/\\/g, '/');
+
         const [result] = await pool.execute(
-            'INSERT INTO medical_documents (filename, filepath, mimetype, size, document_type, description, user_id, visibility) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO medical_documents (patient_id, filename, filepath, document_type, description, visibility, upload_date) VALUES (?, ?, ?, ?, ?, ?, NOW())',
             [
+                patientId,
                 req.file.originalname,
-                req.file.path,
-                req.file.mimetype,
-                req.file.size,
+                normalizedPath, // Store normalized path
                 documentType || 'OTHER',
                 description || null,
-                req.user.id,
-                'public' // Default to public
+                'PUBLIC' // Default to PUBLIC (uppercase to match ENUM)
             ]
         );
 
@@ -45,18 +50,18 @@ const uploadDocument = async (req, res) => {
             message: 'File uploaded successfully',
             document: {
                 id: result.insertId,
-                filename: req.file.originalname,
-                filepath: req.file.path,
-                mimetype: req.file.mimetype,
-                size: req.file.size,
-                documentType: documentType || 'OTHER',
-                description: description || null,
-                createdAt: new Date()
+                fileName: req.file.originalname,
+                filePath: req.file.path,
+                fileType: req.file.mimetype,
+                fileSize: req.file.size,
+                category: documentType || 'OTHER',
+                isPrivate: false,
+                uploadDate: new Date().toISOString()
             }
         });
     } catch (error) {
         console.error('File upload error:', error);
-        res.status(500).json({ message: 'Server error during file upload' });
+        res.status(500).json({ message: 'Server error during file upload', error: error.message });
     }
 };
 
@@ -67,12 +72,26 @@ const uploadDocument = async (req, res) => {
  */
 const getDocuments = async (req, res) => {
     try {
+        const patientId = req.user.profile_id || req.user.id;
+
         const [documents] = await pool.execute(
-            'SELECT id, filename, filepath, mimetype, size, document_type as documentType, description, visibility, created_at as createdAt FROM medical_documents WHERE user_id = ? ORDER BY created_at DESC',
-            [req.user.id]
+            `SELECT id, filename as fileName, filepath as filePath, document_type as category, 
+                    description, visibility, upload_date as uploadDate,
+                    IF(visibility = 'PRIVATE', true, false) as isPrivate
+             FROM medical_documents 
+             WHERE patient_id = ? 
+             ORDER BY upload_date DESC`,
+            [patientId]
         );
 
-        res.json(documents);
+        // Add fileSize and fileType from filesystem if needed (not stored in DB)
+        const documentsWithMetadata = documents.map(doc => ({
+            ...doc,
+            fileSize: 0, // Not stored in schema
+            fileType: 'application/pdf' // Default, not stored in schema
+        }));
+
+        res.json(documentsWithMetadata);
     } catch (error) {
         console.error('Get documents error:', error);
         res.status(500).json({ message: 'Server error while fetching documents' });
@@ -100,11 +119,11 @@ const getPatientDocuments = async (req, res) => {
                 'SELECT share_medical_history FROM patients WHERE id = ?',
                 [userId]
             );
-            
+
             if (patientSettings.length === 0) {
                 return res.status(404).json({ message: 'Patient not found' });
             }
-            
+
             // If patient has disabled sharing medical history, return empty array
             if (!patientSettings[0].share_medical_history) {
                 console.log(`🔒 Patient ${userId} has disabled medical history sharing`);
@@ -114,23 +133,22 @@ const getPatientDocuments = async (req, res) => {
 
         let query = `SELECT 
             id, 
-            filename, 
-            filepath, 
-            mimetype, 
-            size, 
-            document_type as documentType, 
+            filename as fileName, 
+            filepath as filePath, 
+            document_type as category, 
             description, 
             visibility,
-            created_at as createdAt 
+            upload_date as uploadDate,
+            IF(visibility = 'PRIVATE', true, false) as isPrivate
             FROM medical_documents 
-            WHERE user_id = ?`;
-        
-        // Doctors can only see public visibility documents
+            WHERE patient_id = ?`;
+
+        // Doctors can only see PUBLIC visibility documents
         if (userRole === 'DOCTOR') {
-            query += ' AND (visibility = "public" OR visibility IS NULL)';
+            query += ' AND visibility = "PUBLIC"';
         }
-        
-        query += ' ORDER BY created_at DESC';
+
+        query += ' ORDER BY upload_date DESC';
 
         const [documents] = await pool.execute(query, [userId]);
 
@@ -148,8 +166,10 @@ const getPatientDocuments = async (req, res) => {
  */
 const deleteDocument = async (req, res) => {
     try {
+        const patientId = req.user.profile_id || req.user.id;
+
         const [documents] = await pool.execute(
-            'SELECT id, user_id, filepath FROM medical_documents WHERE id = ?',
+            'SELECT id, patient_id, filepath FROM medical_documents WHERE id = ?',
             [req.params.id]
         );
 
@@ -159,8 +179,8 @@ const deleteDocument = async (req, res) => {
 
         const document = documents[0];
 
-        // Check if the user owns the document
-        if (document.user_id !== req.user.id && req.user.role !== 'ADMIN') {
+        // Check if the user owns the document (using patient_id)
+        if (document.patient_id !== patientId && req.user.role !== 'ADMIN') {
             return res.status(403).json({ message: 'Not authorized to delete this document' });
         }
 
@@ -192,11 +212,11 @@ const updateDocumentPrivacy = async (req, res) => {
     try {
         const { id } = req.params;
         const { isPrivate } = req.body;
-        const userId = req.user.id;
+        const patientId = req.user.profile_id || req.user.id;
 
         // Verify ownership
         const [documents] = await pool.execute(
-            'SELECT id, user_id FROM medical_documents WHERE id = ?',
+            'SELECT id, patient_id FROM medical_documents WHERE id = ?',
             [id]
         );
 
@@ -204,19 +224,20 @@ const updateDocumentPrivacy = async (req, res) => {
             return res.status(404).json({ message: 'Document not found' });
         }
 
-        if (documents[0].user_id !== userId) {
+        if (documents[0].patient_id !== patientId) {
             return res.status(403).json({ message: 'Not authorized to modify this document' });
         }
 
-        // Update privacy setting
+        // Update privacy setting using visibility column
+        const visibility = isPrivate ? 'PRIVATE' : 'PUBLIC';
         await pool.execute(
-            'UPDATE medical_documents SET is_private = ? WHERE id = ?',
-            [isPrivate ? 1 : 0, id]
+            'UPDATE medical_documents SET visibility = ? WHERE id = ?',
+            [visibility, id]
         );
 
-        res.json({ 
+        res.json({
             message: 'Privacy setting updated successfully',
-            isPrivate: isPrivate 
+            isPrivate: isPrivate
         });
     } catch (error) {
         console.error('Update privacy error:', error);
@@ -231,7 +252,7 @@ const updateDocumentPrivacy = async (req, res) => {
  */
 const downloadDocument = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const patientId = req.user.profile_id || req.user.id;
         const userRole = req.user.role;
         const documentId = req.params.id;
 
@@ -248,22 +269,30 @@ const downloadDocument = async (req, res) => {
         const document = documents[0];
 
         // Patients can access their own documents
-        if (userRole === 'PATIENT' && document.user_id !== userId) {
+        if (userRole === 'PATIENT' && document.patient_id !== patientId) {
             return res.status(403).json({ message: 'Access denied' });
         }
 
-        // Doctors cannot access private documents or private visibility
-        if (userRole === 'DOCTOR' && (document.is_private || document.visibility === 'private')) {
+        // Doctors cannot access PRIVATE visibility documents
+        if (userRole === 'DOCTOR' && document.visibility === 'PRIVATE') {
             return res.status(403).json({
                 message: 'This document is private and cannot be accessed',
                 code: 'PRIVATE_DOCUMENT'
             });
         }
 
-        const filePath = path.resolve(document.filepath);
+        // Resolve file path correctly
+        // Remove leading slash if present and join with backend directory
+        let relativePath = document.filepath;
+        if (relativePath.startsWith('/')) {
+            relativePath = relativePath.substring(1);
+        }
+        const filePath = path.join(__dirname, '..', relativePath);
 
         // Check if file exists
         if (!fs.existsSync(filePath)) {
+            console.error(`File not found: ${filePath}`);
+            console.error(`DB filepath: ${document.filepath}`);
             return res.status(404).json({ message: 'File not found on server' });
         }
 
@@ -291,7 +320,7 @@ const updateDocumentVisibility = async (req, res) => {
     try {
         const { visibility } = req.body;
         const documentId = req.params.id;
-        const userId = req.user.id;
+        const patientId = req.user.profile_id || req.user.id;
 
         if (!['private', 'public'].includes(visibility)) {
             return res.status(400).json({ message: 'Invalid visibility value. Must be "private" or "public"' });
@@ -299,7 +328,7 @@ const updateDocumentVisibility = async (req, res) => {
 
         // Verify document belongs to user
         const [documents] = await pool.execute(
-            'SELECT user_id FROM medical_documents WHERE id = ?',
+            'SELECT patient_id FROM medical_documents WHERE id = ?',
             [documentId]
         );
 
@@ -307,19 +336,20 @@ const updateDocumentVisibility = async (req, res) => {
             return res.status(404).json({ message: 'Document not found' });
         }
 
-        if (documents[0].user_id !== userId) {
+        if (documents[0].patient_id !== patientId) {
             return res.status(403).json({ message: 'You can only update your own documents' });
         }
 
-        // Update visibility
+        // Update visibility (convert to uppercase for ENUM)
+        const visibilityUppercase = visibility.toUpperCase();
         await pool.execute(
             'UPDATE medical_documents SET visibility = ? WHERE id = ?',
-            [visibility, documentId]
+            [visibilityUppercase, documentId]
         );
 
-        res.json({ 
+        res.json({
             message: 'Visibility updated successfully',
-            visibility: visibility 
+            visibility: visibility
         });
     } catch (error) {
         console.error('Update visibility error:', error);
