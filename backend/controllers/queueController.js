@@ -133,16 +133,35 @@ const callNextPatient = async (req, res) => {
 
         const nextPatient = nextPatients[0];
 
+        // Update appointment status to IN_PROGRESS
+        await pool.execute(
+            `UPDATE appointments 
+             SET status = 'IN_PROGRESS', 
+                 started_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [nextPatient.id]
+        );
 
+        // Update queue status
+        await pool.execute(
+            `UPDATE appointment_queue
+             SET status = 'IN_PROGRESS',
+                 called_at = NOW(),
+                 started_at = NOW()
+             WHERE appointment_id = ?`,
+            [nextPatient.id]
+        );
 
         res.json({
             success: true,
-            message: 'Next patient called',
+            message: 'Next patient called successfully',
             data: {
                 appointmentId: nextPatient.id,
                 queueNumber: nextPatient.queue_number,
                 patientName: nextPatient.patient_name,
-                patientId: nextPatient.patient_id
+                patientId: nextPatient.patient_id,
+                status: 'IN_PROGRESS'
             }
         });
     } catch (error) {

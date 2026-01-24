@@ -39,10 +39,11 @@ async function seedMedicalRecords() {
                 filename = `document_${faker.string.alphanumeric(8)}.pdf`;
             }
 
+            // Use path format that matches documentController: 'uploads/filename' (no leading slash)
             await pool.execute(
                 `INSERT INTO medical_documents (patient_id, filename, filepath, document_type, description, visibility, uploaded_by_doctor_id)
                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [patient.id, filename, `/uploads/documents/${filename}`, documentType,
+                [patient.id, filename, `uploads/documents/${filename}`, documentType,
                 faker.lorem.sentence(), visibility, doctor.id]
             );
             docCount++;

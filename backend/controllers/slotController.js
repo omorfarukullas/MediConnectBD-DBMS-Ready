@@ -84,22 +84,24 @@ const getAvailableSlots = async (req, res) => {
 
         // 3. Get Booking Counts per Session (Grouped by Date + Time)
         // We assume appointments for a session are stored with appointment_time = session.start_time
+        // Using DATE() function to handle UTC timestamps properly
         const [bookingCounts] = await pool.execute(`
             SELECT 
-                appointment_date, 
+                DATE(appointment_date) as appt_date, 
                 appointment_time, 
                 COUNT(*) as book_count
             FROM appointments
             WHERE doctor_id = ? 
-            AND appointment_date BETWEEN ? AND ?
+            AND DATE(appointment_date) BETWEEN ? AND ?
             AND status != 'CANCELLED'
-            GROUP BY appointment_date, appointment_time
+            GROUP BY DATE(appointment_date), appointment_time
         `, [doctorId, start.toISOString().split('T')[0], end.toISOString().split('T')[0]]);
 
         // Create a fast lookup map: "YYYY-MM-DD_HH:mm" -> count
         const bookingMap = {};
         bookingCounts.forEach(b => {
-            const dateStr = b.appointment_date.toISOString().split('T')[0];
+            // appt_date is already a Date object representing the date component
+            const dateStr = b.appt_date.toISOString().split('T')[0];
             const timeStr = b.appointment_time.substring(0, 5);
             bookingMap[`${dateStr}_${timeStr}`] = b.book_count;
         });
@@ -233,7 +235,7 @@ const deleteSlot = async (req, res) => {
         const [slots] = await pool.execute('SELECT doctor_id FROM doctor_slots WHERE id = ?', [id]);
         if (slots.length === 0) return res.status(404).json({ success: false, message: 'Slot not found' });
 
-        if (req.user.role === 'DOCTOR' && slots[0].doctor_id !== req.user.id) {
+        if (req.user.role === 'DOCTOR' && slots[0].doctor_id !== req.user.profile_id) {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 

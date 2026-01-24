@@ -401,7 +401,7 @@ const getPrivacySettings = async (req, res) => {
         const patientId = req.user.profile_id || req.user.id;
 
         const [patients] = await pool.execute(
-            'SELECT share_medical_history FROM patients WHERE id = ?',
+            'SELECT share_medical_history, is_visible_in_search FROM patients WHERE id = ?',
             [patientId]
         );
 
@@ -410,7 +410,9 @@ const getPrivacySettings = async (req, res) => {
         }
 
         res.json({
-            shareMedicalHistory: patients[0].share_medical_history === 1
+            shareHistory: patients[0].share_medical_history === 1, // Match frontend expectation
+            shareMedicalHistory: patients[0].share_medical_history === 1,
+            visibleToSearch: patients[0].is_visible_in_search === 1
         });
     } catch (error) {
         console.error('Get privacy settings error:', error);
@@ -426,20 +428,27 @@ const getPrivacySettings = async (req, res) => {
 const updatePrivacySettings = async (req, res) => {
     try {
         const patientId = req.user.profile_id || req.user.id;
-        const { shareMedicalHistory } = req.body;
+        let { shareMedicalHistory, visibleToSearch, shareHistory } = req.body;
 
-        if (typeof shareMedicalHistory !== 'boolean') {
-            return res.status(400).json({ message: 'shareMedicalHistory must be a boolean value' });
+        // Handle frontend mismatch (shareHistory vs shareMedicalHistory)
+        if (shareMedicalHistory === undefined && shareHistory !== undefined) {
+            shareMedicalHistory = shareHistory;
+        }
+
+        if (typeof shareMedicalHistory !== 'boolean' || typeof visibleToSearch !== 'boolean') {
+            return res.status(400).json({ message: 'shareHistory/shareMedicalHistory and visibleToSearch must be boolean values' });
         }
 
         await pool.execute(
-            'UPDATE patients SET share_medical_history = ? WHERE id = ?',
-            [shareMedicalHistory ? 1 : 0, patientId]
+            'UPDATE patients SET share_medical_history = ?, is_visible_in_search = ? WHERE id = ?',
+            [shareMedicalHistory ? 1 : 0, visibleToSearch ? 1 : 0, patientId]
         );
 
         res.json({
             message: 'Privacy settings updated successfully',
-            shareMedicalHistory
+            shareHistory: shareMedicalHistory, // Return matching frontend expectation
+            shareMedicalHistory, // Keep for backward compatibility
+            visibleToSearch
         });
     } catch (error) {
         console.error('Update privacy settings error:', error);

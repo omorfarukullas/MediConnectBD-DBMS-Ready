@@ -23,7 +23,7 @@ const createReview = async (req, res) => {
         // Check if user already reviewed this doctor
         const [existingReviews] = await pool.execute(
             'SELECT id FROM reviews WHERE patient_id = ? AND doctor_id = ?',
-            [req.user.id, doctorId]
+            [req.user.profile_id || req.user.id, doctorId]
         );
 
         if (existingReviews.length > 0) {
@@ -31,21 +31,27 @@ const createReview = async (req, res) => {
         }
 
         // Create review
+        const patientId = req.user.profile_id || req.user.id;
         const [result] = await pool.execute(
             'INSERT INTO reviews (patient_id, doctor_id, rating, comment, appointment_id, is_verified) VALUES (?, ?, ?, ?, ?, ?)',
-            [req.user.id, doctorId, rating, comment || null, appointmentId || null, appointmentId ? 1 : 0]
+            [patientId, doctorId, rating, comment || null, appointmentId || null, appointmentId ? 1 : 0]
         );
 
-        // Update doctor's average rating
+        // Update doctor's average rating and review count
         const [allReviews] = await pool.execute('SELECT rating FROM reviews WHERE doctor_id = ?', [doctorId]);
         const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
-        await pool.execute('UPDATE doctors SET rating = ? WHERE id = ?', [avgRating.toFixed(1), doctorId]);
+        const reviewCount = allReviews.length;
+
+        await pool.execute(
+            'UPDATE doctors SET rating = ?, review_count = ? WHERE id = ?',
+            [avgRating.toFixed(1), reviewCount, doctorId]
+        );
 
         res.status(201).json({
             message: 'Review created successfully',
             review: {
                 id: result.insertId,
-                patientId: req.user.id,
+                patientId: patientId,
                 doctorId,
                 rating,
                 comment,
@@ -240,7 +246,7 @@ const deleteReview = async (req, res) => {
             'SELECT rating FROM reviews WHERE doctor_id = ?',
             [doctorId]
         );
-        
+
         if (remainingReviews.length > 0) {
             const avgRating = remainingReviews.reduce((sum, r) => sum + r.rating, 0) / remainingReviews.length;
             await pool.execute(

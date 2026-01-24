@@ -170,6 +170,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewDoctorId, setReviewDoctorId] = useState<number | null>(null);
+  const [reviewDoctorName, setReviewDoctorName] = useState<string>('');
   const [reviewAppointmentId, setReviewAppointmentId] = useState<number | null>(null);
 
   // Settings Internal State
@@ -480,9 +481,11 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   };
 
   const handleWriteReview = (appointment: Appointment) => {
-    // Extract doctor ID from appointment (assuming it's stored as doctorId)
+    // Extract doctor ID and name from appointment
     const doctorId = (appointment as any).doctorId || 1; // Fallback to 1 if not available
+    const doctorName = (appointment as any).doctorName || appointment.doctorName || 'Doctor';
     setReviewDoctorId(doctorId);
+    setReviewDoctorName(doctorName);
     setReviewAppointmentId(Number(appointment.id));
     setIsReviewModalOpen(true);
   };
@@ -991,10 +994,12 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
               {/* Review Modal */}
               {isReviewModalOpen && reviewDoctorId && reviewAppointmentId && (
                 <ReviewModal
-                  doctorId={reviewDoctorId}
-                  appointmentId={reviewAppointmentId}
+                  isOpen={isReviewModalOpen}
                   onClose={() => setIsReviewModalOpen(false)}
-                  onSubmitSuccess={handleReviewSubmit}
+                  doctorId={reviewDoctorId}
+                  doctorName={reviewDoctorName}
+                  appointmentId={reviewAppointmentId}
+                  onReviewSubmitted={handleReviewSubmit}
                 />
               )}
             </div>

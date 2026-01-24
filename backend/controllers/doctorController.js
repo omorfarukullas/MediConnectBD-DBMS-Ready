@@ -68,7 +68,8 @@ const getDoctors = async (req, res) => {
             },
             degrees: doc.qualification ? doc.qualification.split(',').map(d => d.trim()) : ['MBBS'],
             languages: ['Bangla', 'English'],
-            rating: 4.5,
+            rating: parseFloat(doc.rating || 0),
+            reviewCount: parseInt(doc.review_count || 0),
             isVerified: false,
             available: false
         }));
@@ -101,6 +102,8 @@ const getDoctorById = async (req, res) => {
                 experience_years: doc.experience_years,
                 consultation_fee: doc.consultation_fee,
                 bio: doc.bio,
+                rating: parseFloat(doc.rating || 0),
+                review_count: parseInt(doc.review_count || 0),
                 created_at: doc.created_at
             });
         } else {

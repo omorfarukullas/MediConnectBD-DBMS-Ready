@@ -41,10 +41,11 @@ async function checkDatabaseStatus() {
 
         // Get sample doctor with appointments
         const [doctors] = await connection.query(
-            `SELECT d.id, d.full_name, d.email, COUNT(a.id) as appt_count
+            `SELECT d.id, d.full_name, u.email, COUNT(a.id) as appt_count
              FROM doctors d
+             JOIN users u ON d.user_id = u.id
              LEFT JOIN appointments a ON d.id = a.doctor_id AND a.appointment_date = ?
-             GROUP BY d.id
+             GROUP BY d.id, u.email
              HAVING appt_count > 0
              ORDER BY appt_count DESC
              LIMIT 1`,
@@ -58,6 +59,22 @@ async function checkDatabaseStatus() {
         console.log('   Super Admin:');
         console.log('   Email: superadmin@mediconnect.com');
         console.log('');
+
+        // Get sample patient
+        const [patients] = await connection.query(
+            `SELECT p.id, p.full_name, u.email 
+             FROM patients p
+             JOIN users u ON p.user_id = u.id
+             LIMIT 1`
+        );
+
+        if (patients.length > 0) {
+            console.log('   Sample Patient:');
+            console.log(`   Email: ${patients[0].email}`);
+            console.log(`   Name: ${patients[0].full_name}`);
+            console.log(`   ID: ${patients[0].id}`);
+            console.log('');
+        }
 
         if (doctors.length > 0) {
             console.log('   Doctor with today\'s queue:');

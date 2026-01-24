@@ -17,7 +17,7 @@ async function testMyAppointments() {
         const docLogin = await fetch(`${API_BASE}/doctors/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: 'dee.lockman@gmail.com', password: 'password123' })
+            body: JSON.stringify({ email: 'elliott63@hotmail.com', password: 'password123' })
         });
 
         const docData = await docLogin.json();

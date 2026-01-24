@@ -182,10 +182,11 @@ const bookAppointment = async (req, res) => {
 
         // Step 3: Check Current Capacity for this Session
         // We count appointments for this doctor + date + time (session start)
+        // Using DATE() function to handle UTC timestamps properly
         const [counts] = await connection.execute(
             `SELECT COUNT(*) as count FROM appointments 
              WHERE doctor_id = ? 
-             AND appointment_date = ? 
+             AND DATE(appointment_date) = ? 
              AND appointment_time = ? 
              AND status != 'CANCELLED'`,
             [doctorId, appointmentDate, appointmentTime]
@@ -205,7 +206,7 @@ const bookAppointment = async (req, res) => {
         // Step 4: Check if patient already has an appointment in this session
         const [patientBooking] = await connection.execute(
             `SELECT id FROM appointments 
-             WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? AND status != 'CANCELLED'`,
+             WHERE patient_id = ? AND DATE(appointment_date) = ? AND appointment_time = ? AND status != 'CANCELLED'`,
             [patientId, appointmentDate, appointmentTime]
         );
 
@@ -242,7 +243,7 @@ const bookAppointment = async (req, res) => {
              FROM appointment_queue 
              JOIN appointments ON appointment_queue.appointment_id = appointments.id
              WHERE appointments.doctor_id = ? 
-             AND appointments.appointment_date = ?
+             AND DATE(appointments.appointment_date) = ?
              AND appointments.appointment_time = ?`,
             [doctorId, appointmentDate, appointmentTime]
         );

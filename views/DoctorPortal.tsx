@@ -98,6 +98,13 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
         </button>
     );
 
+    // Calculate Dashboard Stats
+    const today = new Date().toISOString().split('T')[0];
+    const todaysAppointments = appointments.filter(apt => apt.date === today);
+    const uniquePatients = new Set(appointments.map(apt => apt.patientId)).size;
+    const pendingTelemed = appointments.filter(apt => apt.type === 'Telemedicine' && apt.status === 'Pending').length;
+    const doctorRating = doctorProfile?.rating || 0;
+
     return (
         <div className="flex min-h-screen bg-slate-50">
 
@@ -185,23 +192,29 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <Card className="bg-blue-50 border-blue-100">
                                     <p className="text-blue-600 font-medium mb-1">Appointments Today</p>
-                                    <h2 className="text-3xl font-bold text-blue-900">12</h2>
-                                    <p className="text-xs text-blue-600 mt-2">4 Telemedicine • 8 Physical</p>
+                                    <h2 className="text-3xl font-bold text-blue-900">{todaysAppointments.length}</h2>
+                                    <p className="text-xs text-blue-600 mt-2">
+                                        {todaysAppointments.filter(a => a.type === 'Telemedicine').length} Telemedicine • {todaysAppointments.filter(a => a.type === 'Physical').length} Physical
+                                    </p>
                                 </Card>
                                 <Card className="bg-green-50 border-green-100">
                                     <p className="text-green-600 font-medium mb-1">Total Patients</p>
-                                    <h2 className="text-3xl font-bold text-green-900">1,250</h2>
-                                    <p className="text-xs text-green-600 mt-2">+15 this week</p>
+                                    <h2 className="text-3xl font-bold text-green-900">{uniquePatients}</h2>
+                                    <p className="text-xs text-green-600 mt-2">Unique patients treated</p>
                                 </Card>
                                 <Card className="bg-purple-50 border-purple-100">
                                     <p className="text-purple-600 font-medium mb-1">Pending Telemed</p>
-                                    <h2 className="text-3xl font-bold text-purple-900">3</h2>
-                                    <p className="text-xs text-purple-600 mt-2">Next in 15 mins</p>
+                                    <h2 className="text-3xl font-bold text-purple-900">{pendingTelemed}</h2>
+                                    <p className="text-xs text-purple-600 mt-2">Upcoming sessions</p>
                                 </Card>
                                 <Card className="bg-yellow-50 border-yellow-100">
                                     <p className="text-yellow-600 font-medium mb-1">Patient Rating</p>
-                                    <h2 className="text-3xl font-bold text-yellow-900">4.8</h2>
-                                    <div className="flex text-yellow-500 text-xs mt-2"><Star size={12} fill="currentColor" /> <Star size={12} fill="currentColor" /> <Star size={12} fill="currentColor" /> <Star size={12} fill="currentColor" /></div>
+                                    <h2 className="text-3xl font-bold text-yellow-900">{doctorRating}</h2>
+                                    <div className="flex text-yellow-500 text-xs mt-2">
+                                        {/* Render stars dynamically if possible, or just icon */}
+                                        <Star size={12} fill="currentColor" />
+                                        <span className="ml-1 text-yellow-700">({doctorProfile?.reviewCount || 0} reviews)</span>
+                                    </div>
                                 </Card>
                             </div>
 
