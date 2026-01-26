@@ -1474,16 +1474,16 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                                 appointments.map((apt: any) => (
                                                     <tr key={apt.id} className="hover:bg-slate-50 transition-colors">
                                                         <td className="p-4">
-                                                            <div className="font-bold text-slate-900">{apt.patient_name}</div>
-                                                            <div className="text-xs text-slate-500">ID: #{apt.patient_id}</div>
+                                                            <div className="font-bold text-slate-900">{apt.patientName}</div>
+                                                            <div className="text-xs text-slate-500">ID: #{apt.patientId}</div>
                                                         </td>
                                                         <td className="p-4">
-                                                            <div className="font-medium text-slate-900">{apt.doctor_name}</div>
+                                                            <div className="font-medium text-slate-900">{apt.doctorName}</div>
                                                             <div className="text-xs text-slate-500">{apt.specialization}</div>
                                                         </td>
                                                         <td className="p-4">
-                                                            <div className="font-medium text-slate-900">{new Date(apt.appointment_date).toLocaleDateString()}</div>
-                                                            <div className="text-xs text-slate-500">{apt.appointment_time}</div>
+                                                            <div className="font-medium text-slate-900">{new Date(apt.date).toLocaleDateString()}</div>
+                                                            <div className="text-xs text-slate-500">{apt.time}</div>
                                                         </td>
                                                         <td className="p-4">
                                                             <Badge variant={
@@ -1925,232 +1925,234 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                     )}
 
                     {/* ... (Other views fallback) ... */}
-                </div >
-            </div >
 
-            {/* --- VIEW: FEEDBACK --- */}
-            {activeView === 'FEEDBACK' && (
-                <div className="space-y-6 animate-fade-in pb-10">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-2xl font-bold text-slate-900">Patient Feedback</h2>
-                            <p className="text-gray-600 mt-1">View and manage patient reviews and ratings</p>
-                        </div>
-                    </div>
 
-                    {isLoadingReviews ? (
-                        <div className="text-center py-16">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-                            <p className="text-slate-500">Loading reviews...</p>
-                        </div>
-                    ) : reviews.length === 0 ? (
-                        <Card className="text-center py-16">
-                            <Star size={64} className="mx-auto text-slate-300 mb-4" />
-                            <h3 className="text-xl font-bold text-slate-900 mb-2">No Reviews Yet</h3>
-                            <p className="text-slate-500">Patient reviews will appear here once submitted.</p>
-                        </Card>
-                    ) : (
-                        <>
-                            {/* Statistics Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <Card className="bg-gradient-to-br from-amber-500 to-amber-600 text-white border-0 shadow-lg">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Average Rating</p>
-                                            <h3 className="text-3xl font-bold">
-                                                {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
-                                            </h3>
-                                        </div>
-                                        <Star className="text-white/40" size={40} />
-                                    </div>
-                                    <div className="mt-2 flex items-center gap-1">
-                                        {[1, 2, 3, 4, 5].map((star) => (
-                                            <Star
-                                                key={star}
-                                                size={14}
-                                                className={`${star <= Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length) ? 'text-white fill-white' : 'text-white/40'}`}
-                                            />
-                                        ))}
-                                    </div>
-                                </Card>
-
-                                <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Total Reviews</p>
-                                            <h3 className="text-3xl font-bold">{reviews.length}</h3>
-                                        </div>
-                                        <MessageCircle className="text-white/40" size={40} />
-                                    </div>
-                                    <p className="text-sm text-white/90 mt-2">All time feedback</p>
-                                </Card>
-
-                                <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-lg">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Verified Reviews</p>
-                                            <h3 className="text-3xl font-bold">
-                                                {reviews.filter(r => r.isVerified).length}
-                                            </h3>
-                                        </div>
-                                        <CheckCircle className="text-white/40" size={40} />
-                                    </div>
-                                    <p className="text-sm text-white/90 mt-2">
-                                        {((reviews.filter(r => r.isVerified).length / reviews.length) * 100).toFixed(0)}% verified
-                                    </p>
-                                </Card>
-
-                                <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">5-Star Reviews</p>
-                                            <h3 className="text-3xl font-bold">
-                                                {reviews.filter(r => r.rating === 5).length}
-                                            </h3>
-                                        </div>
-                                        <TrendingUp className="text-white/40" size={40} />
-                                    </div>
-                                    <p className="text-sm text-white/90 mt-2">
-                                        {((reviews.filter(r => r.rating === 5).length / reviews.length) * 100).toFixed(0)}% excellent
-                                    </p>
-                                </Card>
+                    {/* --- VIEW: FEEDBACK --- */}
+                    {activeView === 'FEEDBACK' && (
+                        <div className="space-y-6 animate-fade-in pb-10">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-slate-900">Patient Feedback</h2>
+                                    <p className="text-gray-600 mt-1">View and manage patient reviews and ratings</p>
+                                </div>
                             </div>
 
-                            {/* Rating Distribution */}
-                            <Card className="shadow-lg">
-                                <h3 className="text-lg font-bold text-slate-900 mb-4">Rating Distribution</h3>
-                                <div className="space-y-3">
-                                    {[5, 4, 3, 2, 1].map((rating) => {
-                                        const count = reviews.filter(r => r.rating === rating).length;
-                                        const percentage = (count / reviews.length) * 100;
-                                        return (
-                                            <div key={rating} className="flex items-center gap-3">
-                                                <div className="flex items-center gap-1 w-16">
-                                                    <span className="text-sm font-semibold text-slate-700">{rating}</span>
-                                                    <Star size={14} className="text-amber-400 fill-amber-400" />
+                            {isLoadingReviews ? (
+                                <div className="text-center py-16">
+                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+                                    <p className="text-slate-500">Loading reviews...</p>
+                                </div>
+                            ) : reviews.length === 0 ? (
+                                <Card className="text-center py-16">
+                                    <Star size={64} className="mx-auto text-slate-300 mb-4" />
+                                    <h3 className="text-xl font-bold text-slate-900 mb-2">No Reviews Yet</h3>
+                                    <p className="text-slate-500">Patient reviews will appear here once submitted.</p>
+                                </Card>
+                            ) : (
+                                <>
+                                    {/* Statistics Cards */}
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <Card className="bg-gradient-to-br from-amber-500 to-amber-600 text-white border-0 shadow-lg">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Average Rating</p>
+                                                    <h3 className="text-3xl font-bold">
+                                                        {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
+                                                    </h3>
                                                 </div>
-                                                <div className="flex-1 h-4 bg-slate-200 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all"
-                                                        style={{ width: `${percentage}%` }}
-                                                    ></div>
-                                                </div>
-                                                <span className="text-sm font-medium text-slate-600 w-12 text-right">{count}</span>
-                                                <span className="text-xs text-slate-500 w-12 text-right">({percentage.toFixed(0)}%)</span>
+                                                <Star className="text-white/40" size={40} />
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            </Card>
-
-                            {/* Filters */}
-                            <Card className="shadow-lg">
-                                <div className="flex flex-wrap gap-3 items-center">
-                                    <span className="text-sm font-semibold text-slate-700">Filter by:</span>
-                                    <button className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
-                                        All Reviews ({reviews.length})
-                                    </button>
-                                    <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
-                                        5 Stars ({reviews.filter(r => r.rating === 5).length})
-                                    </button>
-                                    <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
-                                        4 Stars ({reviews.filter(r => r.rating === 4).length})
-                                    </button>
-                                    <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
-                                        ≤3 Stars ({reviews.filter(r => r.rating <= 3).length})
-                                    </button>
-                                    <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
-                                        Verified ({reviews.filter(r => r.isVerified).length})
-                                    </button>
-                                </div>
-                            </Card>
-
-                            {/* Reviews List */}
-                            <div>
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-lg font-bold text-slate-900">Recent Reviews</h3>
-                                    <span className="text-sm text-slate-500">{reviews.length} total reviews</span>
-                                </div>
-                                <div className="grid gap-4">
-                                    {reviews.map((review) => (
-                                        <Card key={review.id} className="shadow-md hover:shadow-lg transition-all">
-                                            <div className="flex gap-4">
-                                                {/* Avatar */}
-                                                <div className="flex-shrink-0">
-                                                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center text-primary-600 font-bold text-xl border-2 border-primary-300">
-                                                        {review.patientName?.[0] || 'P'}
-                                                    </div>
-                                                </div>
-
-                                                {/* Content */}
-                                                <div className="flex-1 min-w-0">
-                                                    {/* Header */}
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <div>
-                                                            <h4 className="font-bold text-slate-900 text-lg">{review.patientName || 'Anonymous Patient'}</h4>
-                                                            <p className="text-sm text-slate-600">
-                                                                Reviewed <span className="font-semibold text-slate-800">{review.doctorName}</span>
-                                                                <span className="text-slate-400"> • </span>
-                                                                <span className="text-slate-500">{review.specialization}</span>
-                                                            </p>
-                                                        </div>
-                                                        <Button
-                                                            variant="ghost"
-                                                            className="text-slate-400 hover:text-red-600 hover:bg-red-50"
-                                                            onClick={async () => {
-                                                                if (confirm('Delete this review?')) {
-                                                                    try {
-                                                                        await api.deleteReview(review.id);
-                                                                        setReviews(prev => prev.filter(r => r.id !== review.id));
-                                                                    } catch (e) { console.error(e); alert('Failed to delete'); }
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Trash2 size={18} />
-                                                        </Button>
-                                                    </div>
-
-                                                    {/* Rating & Date */}
-                                                    <div className="flex flex-wrap items-center gap-3 mb-3">
-                                                        <div className="flex items-center gap-0.5">
-                                                            {[1, 2, 3, 4, 5].map((star) => (
-                                                                <Star
-                                                                    key={star}
-                                                                    size={18}
-                                                                    className={`${star <= review.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
-                                                                />
-                                                            ))}
-                                                        </div>
-                                                        <span className="text-sm text-slate-500">
-                                                            {new Date(review.createdAt).toLocaleDateString('en-US', {
-                                                                month: 'short',
-                                                                day: 'numeric',
-                                                                year: 'numeric'
-                                                            })}
-                                                        </span>
-                                                        {review.isVerified && (
-                                                            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs rounded-full font-semibold flex items-center gap-1">
-                                                                <CheckCircle size={12} /> Verified Visit
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Comment */}
-                                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                                        <p className="text-slate-700 leading-relaxed italic">
-                                                            "{review.comment}"
-                                                        </p>
-                                                    </div>
-                                                </div>
+                                            <div className="mt-2 flex items-center gap-1">
+                                                {[1, 2, 3, 4, 5].map((star) => (
+                                                    <Star
+                                                        key={star}
+                                                        size={14}
+                                                        className={`${star <= Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length) ? 'text-white fill-white' : 'text-white/40'}`}
+                                                    />
+                                                ))}
                                             </div>
                                         </Card>
-                                    ))}
-                                </div>
-                            </div>
-                        </>
+
+                                        <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Total Reviews</p>
+                                                    <h3 className="text-3xl font-bold">{reviews.length}</h3>
+                                                </div>
+                                                <MessageCircle className="text-white/40" size={40} />
+                                            </div>
+                                            <p className="text-sm text-white/90 mt-2">All time feedback</p>
+                                        </Card>
+
+                                        <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-lg">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Verified Reviews</p>
+                                                    <h3 className="text-3xl font-bold">
+                                                        {reviews.filter(r => r.isVerified).length}
+                                                    </h3>
+                                                </div>
+                                                <CheckCircle className="text-white/40" size={40} />
+                                            </div>
+                                            <p className="text-sm text-white/90 mt-2">
+                                                {((reviews.filter(r => r.isVerified).length / reviews.length) * 100).toFixed(0)}% verified
+                                            </p>
+                                        </Card>
+
+                                        <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">5-Star Reviews</p>
+                                                    <h3 className="text-3xl font-bold">
+                                                        {reviews.filter(r => r.rating === 5).length}
+                                                    </h3>
+                                                </div>
+                                                <TrendingUp className="text-white/40" size={40} />
+                                            </div>
+                                            <p className="text-sm text-white/90 mt-2">
+                                                {((reviews.filter(r => r.rating === 5).length / reviews.length) * 100).toFixed(0)}% excellent
+                                            </p>
+                                        </Card>
+                                    </div>
+
+                                    {/* Rating Distribution */}
+                                    <Card className="shadow-lg">
+                                        <h3 className="text-lg font-bold text-slate-900 mb-4">Rating Distribution</h3>
+                                        <div className="space-y-3">
+                                            {[5, 4, 3, 2, 1].map((rating) => {
+                                                const count = reviews.filter(r => r.rating === rating).length;
+                                                const percentage = (count / reviews.length) * 100;
+                                                return (
+                                                    <div key={rating} className="flex items-center gap-3">
+                                                        <div className="flex items-center gap-1 w-16">
+                                                            <span className="text-sm font-semibold text-slate-700">{rating}</span>
+                                                            <Star size={14} className="text-amber-400 fill-amber-400" />
+                                                        </div>
+                                                        <div className="flex-1 h-4 bg-slate-200 rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all"
+                                                                style={{ width: `${percentage}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        <span className="text-sm font-medium text-slate-600 w-12 text-right">{count}</span>
+                                                        <span className="text-xs text-slate-500 w-12 text-right">({percentage.toFixed(0)}%)</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </Card>
+
+                                    {/* Filters */}
+                                    <Card className="shadow-lg">
+                                        <div className="flex flex-wrap gap-3 items-center">
+                                            <span className="text-sm font-semibold text-slate-700">Filter by:</span>
+                                            <button className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
+                                                All Reviews ({reviews.length})
+                                            </button>
+                                            <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+                                                5 Stars ({reviews.filter(r => r.rating === 5).length})
+                                            </button>
+                                            <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+                                                4 Stars ({reviews.filter(r => r.rating === 4).length})
+                                            </button>
+                                            <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+                                                ≤3 Stars ({reviews.filter(r => r.rating <= 3).length})
+                                            </button>
+                                            <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+                                                Verified ({reviews.filter(r => r.isVerified).length})
+                                            </button>
+                                        </div>
+                                    </Card>
+
+                                    {/* Reviews List */}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-lg font-bold text-slate-900">Recent Reviews</h3>
+                                            <span className="text-sm text-slate-500">{reviews.length} total reviews</span>
+                                        </div>
+                                        <div className="grid gap-4">
+                                            {reviews.map((review) => (
+                                                <Card key={review.id} className="shadow-md hover:shadow-lg transition-all">
+                                                    <div className="flex gap-4">
+                                                        {/* Avatar */}
+                                                        <div className="flex-shrink-0">
+                                                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center text-primary-600 font-bold text-xl border-2 border-primary-300">
+                                                                {review.patientName?.[0] || 'P'}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Content */}
+                                                        <div className="flex-1 min-w-0">
+                                                            {/* Header */}
+                                                            <div className="flex justify-between items-start mb-2">
+                                                                <div>
+                                                                    <h4 className="font-bold text-slate-900 text-lg">{review.patientName || 'Anonymous Patient'}</h4>
+                                                                    <p className="text-sm text-slate-600">
+                                                                        Reviewed <span className="font-semibold text-slate-800">{review.doctorName}</span>
+                                                                        <span className="text-slate-400"> • </span>
+                                                                        <span className="text-slate-500">{review.specialization}</span>
+                                                                    </p>
+                                                                </div>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    className="text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                                    onClick={async () => {
+                                                                        if (confirm('Delete this review?')) {
+                                                                            try {
+                                                                                await api.deleteReview(review.id);
+                                                                                setReviews(prev => prev.filter(r => r.id !== review.id));
+                                                                            } catch (e) { console.error(e); alert('Failed to delete'); }
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Trash2 size={18} />
+                                                                </Button>
+                                                            </div>
+
+                                                            {/* Rating & Date */}
+                                                            <div className="flex flex-wrap items-center gap-3 mb-3">
+                                                                <div className="flex items-center gap-0.5">
+                                                                    {[1, 2, 3, 4, 5].map((star) => (
+                                                                        <Star
+                                                                            key={star}
+                                                                            size={18}
+                                                                            className={`${star <= review.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
+                                                                        />
+                                                                    ))}
+                                                                </div>
+                                                                <span className="text-sm text-slate-500">
+                                                                    {new Date(review.createdAt).toLocaleDateString('en-US', {
+                                                                        month: 'short',
+                                                                        day: 'numeric',
+                                                                        year: 'numeric'
+                                                                    })}
+                                                                </span>
+                                                                {review.isVerified && (
+                                                                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs rounded-full font-semibold flex items-center gap-1">
+                                                                        <CheckCircle size={12} /> Verified Visit
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Comment */}
+                                                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                                                <p className="text-slate-700 leading-relaxed italic">
+                                                                    "{review.comment}"
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </Card>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     )}
-                </div>
-            )}
+
+                </div >
+            </div >
 
             {/* MODALS (Kept same structure, inherits new styles) */}
             {/* RESOURCE UPDATE MODAL */}
