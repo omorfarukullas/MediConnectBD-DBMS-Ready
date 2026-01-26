@@ -212,4 +212,104 @@ const authDoctor = async (req, res) => {
     }
 };
 
-module.exports = { authDoctor, getDoctors, getDoctorById };
+/**
+ * @desc    Get doctor's earnings summary
+ * @route   GET /api/doctors/earnings
+ * @access  Private (Doctor only)
+ */
+const getDoctorEarnings = async (req, res) => {
+    try {
+        const doctorId = req.user.profile_id; // Doctor's profile ID from auth middleware
+
+        console.log('💰 Fetching earnings for Doctor ID:', doctorId);
+
+        // Get doctor's consultation fee
+        const [doctors] = await pool.execute(
+            'SELECT consultation_fee FROM doctors WHERE id = ?',
+            [doctorId]
+        );
+
+        if (doctors.length === 0) {
+            return res.status(404).json({ message: 'Doctor not found' });
+        }
+
+        const consultationFee = parseFloat(doctors[0].consultation_fee || 0);
+
+        // Get completed appointments breakdown by type
+        const [stats] = await pool.execute(
+            `SELECT 
+                consultation_type,
+                COUNT(*) as count
+             FROM appointments
+             WHERE doctor_id = ? AND status = 'COMPLETED'
+             GROUP BY consultation_type`,
+            [doctorId]
+        );
+
+        // Calculate earnings by type
+        let telemedicineCount = 0;
+        let physicalCount = 0;
+
+        stats.forEach(stat => {
+            if (stat.consultation_type === 'TELEMEDICINE') {
+                telemedicineCount = stat.count;
+            } else {
+                physicalCount = stat.count;
+            }
+        });
+
+        const telemedicineEarnings = telemedicineCount * consultationFee;
+        const physicalEarnings = physicalCount * consultationFee;
+        const totalEarnings = telemedicineEarnings + physicalEarnings;
+
+        // Get recent completed appointments for transaction history
+        const [transactions] = await pool.execute(
+            `SELECT 
+                a.id,
+                a.appointment_date,
+                a.appointment_time,
+                a.consultation_type,
+                a.completed_at,
+                p.full_name as patient_name
+             FROM appointments a
+             LEFT JOIN patients p ON a.patient_id = p.id
+             WHERE a.doctor_id = ? AND a.status = 'COMPLETED'
+             ORDER BY a.completed_at DESC
+             LIMIT 20`,
+            [doctorId]
+        );
+
+        const formattedTransactions = transactions.map(t => ({
+            id: t.id,
+            date: t.appointment_date,
+            time: t.appointment_time,
+            patientName: t.patient_name || 'Unknown Patient',
+            service: t.consultation_type === 'TELEMEDICINE' ? 'Online Consultation' : 'Physical Visit',
+            amount: consultationFee,
+            status: 'Paid',
+            completedAt: t.completed_at
+        }));
+
+        res.json({
+            totalEarnings,
+            telemedicine: {
+                count: telemedicineCount,
+                earnings: telemedicineEarnings
+            },
+            physical: {
+                count: physicalCount,
+                earnings: physicalEarnings
+            },
+            consultationFee,
+            transactions: formattedTransactions
+        });
+
+        console.log('✅ Earnings calculated:', { totalEarnings, telemedicineCount, physicalCount });
+
+    } catch (error) {
+        console.error('❌ getDoctorEarnings Error:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+module.exports = { authDoctor, getDoctors, getDoctorById, getDoctorEarnings };

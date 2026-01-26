@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, User, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, User, ChevronDown, ChevronUp, AlertCircle, Video } from 'lucide-react';
 import { Card, Button, Badge } from './UIComponents';
 import { Appointment } from '../types';
 import { isAppointmentActive, formatTime, groupAppointmentsByDate } from '../utils/timeValidation';
@@ -13,11 +13,13 @@ import { MedicalHistoryModal } from './MedicalHistoryModal';
 interface DoctorAppointmentListProps {
   appointments: Appointment[];
   onRefresh?: () => void;
+  onStartCall?: (appointment: Appointment) => void;
 }
 
-export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({ 
+export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
   appointments,
-  onRefresh 
+  onRefresh,
+  onStartCall
 }) => {
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [selectedPatient, setSelectedPatient] = useState<{
@@ -101,7 +103,7 @@ export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
             const isExpanded = expandedDates.has(date);
             const dateObj = new Date(date);
             const isToday = dateObj.toDateString() === new Date().toDateString();
-            
+
             return (
               <Card key={date} className="overflow-hidden">
                 {/* Date Header */}
@@ -115,11 +117,11 @@ export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
                     </div>
                     <div className="text-left">
                       <h3 className="font-semibold text-slate-900">
-                        {dateObj.toLocaleDateString('en-US', { 
-                          weekday: 'long', 
-                          year: 'numeric', 
-                          month: 'long', 
-                          day: 'numeric' 
+                        {dateObj.toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
                         })}
                       </h3>
                       <p className="text-sm text-gray-600">
@@ -141,14 +143,14 @@ export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
                       .map((appointment) => {
                         const appointmentTime = `${appointment.date} ${appointment.time}`;
                         const isActive = isAppointmentActive(appointmentTime);
-                        
+                        const appointmentType = (appointment.consultationType || appointment.type || '').includes('Telemedicine') ? 'Telemedicine' : 'In-Person';
+
                         return (
                           <button
                             key={appointment.id}
                             onClick={() => handlePatientClick(appointment)}
-                            className={`w-full p-4 hover:bg-gray-50 transition-colors text-left ${
-                              isActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'
-                            }`}
+                            className={`w-full p-4 hover:bg-gray-50 transition-colors text-left ${isActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'
+                              }`}
                           >
                             <div className="flex items-center justify-between gap-4">
                               <div className="flex items-center gap-3 flex-1">
@@ -186,9 +188,24 @@ export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
                               </div>
 
                               {/* Status Badge */}
-                              <Badge variant={getStatusColor(appointment.status as string)}>
-                                {appointment.status}
-                              </Badge>
+                              <div className="flex flex-col items-end gap-2">
+                                <Badge variant={getStatusColor(appointment.status as string)}>
+                                  {appointment.status}
+                                </Badge>
+
+                                {appointmentType === 'Telemedicine' && appointment.status === 'CONFIRMED' && (
+                                  <Button
+                                    size="sm"
+                                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs py-1 h-auto"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (onStartCall) onStartCall(appointment);
+                                    }}
+                                  >
+                                    <Video size={14} className="mr-1" /> Start Call
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           </button>
                         );

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Video, Calendar, Clock, AlertCircle, ArrowLeft, Filter, CheckCircle, User, Star, Activity, ChevronRight, AlertTriangle, Settings, Bell, Lock, Globe, Save, Mail, Phone, Shield, LogOut, ChevronLeft, GraduationCap, Languages, Menu, FileText, Home, Building2 } from 'lucide-react';
+import { Search, MapPin, Video, Calendar, Clock, AlertCircle, ArrowLeft, Filter, CheckCircle, User, Star, Activity, ChevronRight, AlertTriangle, Settings, Bell, Lock, Globe, Save, Mail, Phone, Shield, LogOut, ChevronLeft, GraduationCap, Languages, Menu, FileText, Home, Building2, CalendarClock, Edit2 } from 'lucide-react';
 import { MOCK_VITALS } from '../constants';
 import { Doctor, Appointment, AppointmentStatus, User as UserType } from '../types';
 import { Button, Card, Badge, Modal } from '../components/UIComponents';
@@ -21,14 +21,14 @@ interface PatientPortalProps {
   currentUser?: UserType;
   onNavigate: (view: string) => void;
   onBack: () => void;
-  initialMode?: 'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES';
+  initialMode?: 'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES' | 'TELEMEDICINE';
 }
 
 export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNavigate, onBack, initialMode = 'DASHBOARD' }) => {
   console.log('🎯 PatientPortal component rendering...', { currentUser, initialMode });
 
   // View State
-  const [viewMode, setViewMode] = useState<'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES'>(initialMode);
+  const [viewMode, setViewMode] = useState<'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES' | 'TELEMEDICINE'>(initialMode);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Data Loading State
@@ -170,11 +170,26 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewDoctorId, setReviewDoctorId] = useState<number | null>(null);
+  const [reviewDoctorName, setReviewDoctorName] = useState<string>('');
   const [reviewAppointmentId, setReviewAppointmentId] = useState<number | null>(null);
+  const [reviewInitialData, setReviewInitialData] = useState<{ rating: number; comment: string } | undefined>(undefined);
 
-  // Settings Internal State
   const [activeSettingsTab, setActiveSettingsTab] = useState<'PROFILE' | 'VITALS' | 'SECURITY' | 'NOTIFICATIONS' | 'PRIVACY'>('PROFILE');
   const [message, setMessage] = useState<{ type: string, text: string }>({ type: '', text: '' });
+
+  const handleWriteReview = (appointment: Appointment) => {
+    // Extract doctor ID from appointment
+    const doctorId = (appointment as any).doctorId || 1;
+    const doctorName = (appointment as any).doctorName || 'Doctor';
+    const apptId = Number(appointment.id);
+    const existingReview = (appointment as any).review;
+
+    setReviewDoctorId(doctorId);
+    setReviewDoctorName(doctorName);
+    setReviewAppointmentId(apptId);
+    setReviewInitialData(existingReview ? { rating: existingReview.rating, comment: existingReview.comment } : undefined);
+    setIsReviewModalOpen(true);
+  };
 
   const [settingsForm, setSettingsForm] = useState({
     name: currentUser?.name || 'Rahim Uddin',
@@ -479,20 +494,15 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
     setSelectedAptIdCancel(null);
   };
 
-  const handleWriteReview = (appointment: Appointment) => {
-    // Extract doctor ID from appointment (assuming it's stored as doctorId)
-    const doctorId = (appointment as any).doctorId || 1; // Fallback to 1 if not available
-    setReviewDoctorId(doctorId);
-    setReviewAppointmentId(Number(appointment.id));
-    setIsReviewModalOpen(true);
-  };
+
 
   const handleReviewSubmit = async () => {
     // Refresh appointments to show updated review status
     if (currentUser) {
       try {
         const appointmentsData = await api.getAppointments();
-        setAppointments(appointmentsData);
+        const appointmentsArray = appointmentsData.data || appointmentsData; // Handle both formats
+        setAppointments(Array.isArray(appointmentsArray) ? appointmentsArray : []);
       } catch (err) {
         console.error('Error refreshing appointments:', err);
       }
@@ -517,6 +527,12 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
     }
   };
 
+  // ... (render helpers)
+
+  // ...
+
+
+
   const getNext7Days = () => {
     const dates = [];
     const today = new Date();
@@ -535,7 +551,22 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   // Helper for Sidebar items
   const SidebarItem = ({ view, icon, label }: { view: typeof viewMode, icon: React.ReactNode, label: string }) => (
     <button
-      onClick={() => { setViewMode(view); setIsSidebarOpen(false); onNavigate(view === 'DASHBOARD' ? 'patient' : view === 'MY_APPOINTMENTS' ? 'patient_appointments' : view === 'SETTINGS' ? 'patient_settings' : 'medical_history'); }}
+      onClick={() => {
+        setViewMode(view);
+        setIsSidebarOpen(false);
+        // Only navigate if it's a separate route, otherwise stay on portal and change view
+        // Ideally, we should just update viewMode if it's a single page app. 
+        // But assuming onNavigate updates URL or parent state:
+        const route =
+          view === 'DASHBOARD' ? 'patient' :
+            view === 'MY_APPOINTMENTS' ? 'patient_appointments' :
+              view === 'SETTINGS' ? 'patient_settings' :
+                view === 'TELEMEDICINE' ? 'patient_telemedicine' :
+                  view === 'HOSPITAL_RESOURCES' ? 'patient_resources' :
+                    'medical_history';
+
+        onNavigate(route);
+      }}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all font-medium ${viewMode === view ? 'bg-primary-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}
     >
       {icon} {label}
@@ -561,6 +592,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <SidebarItem view="DASHBOARD" icon={<Home size={18} />} label="Find Doctor" />
           <SidebarItem view="MY_APPOINTMENTS" icon={<Calendar size={18} />} label="My Appointments" />
+          <SidebarItem view="TELEMEDICINE" icon={<Video size={18} />} label="Telemedicine" />
           <SidebarItem view="MEDICAL_HISTORY" icon={<FileText size={18} />} label="Medical History" />
           <SidebarItem view="HOSPITAL_RESOURCES" icon={<Building2 size={18} />} label="Hospital Resources" />
           <SidebarItem view="SETTINGS" icon={<Settings size={18} />} label="Settings" />
@@ -593,8 +625,9 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
               <h2 className="text-xl md:text-2xl font-bold text-slate-900">
                 {viewMode === 'DASHBOARD' ? 'Find Doctor' :
                   viewMode === 'MY_APPOINTMENTS' ? 'My Appointments' :
-                    viewMode === 'MEDICAL_HISTORY' ? 'Medical Records' :
-                      viewMode === 'HOSPITAL_RESOURCES' ? 'Hospital Resources' : 'Settings'}
+                    viewMode === 'TELEMEDICINE' ? 'Telemedicine Portal' :
+                      viewMode === 'MEDICAL_HISTORY' ? 'Medical Records' :
+                        viewMode === 'HOSPITAL_RESOURCES' ? 'Hospital Resources' : 'Settings'}
               </h2>
             </div>
           </div>
@@ -621,10 +654,90 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
             </div>
           )}
 
+
           {/* --- VIEW: HOSPITAL RESOURCES --- */}
           {viewMode === 'HOSPITAL_RESOURCES' && (
             <div className="animate-fade-in">
               <HospitalResourcesView />
+            </div>
+          )}
+
+          {/* --- VIEW: TELEMEDICINE --- */}
+          {viewMode === 'TELEMEDICINE' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900">Telemedicine Sessions</h2>
+                  <p className="text-gray-600 mt-1">Your video consultation history and upcoming sessions</p>
+                </div>
+                <Button onClick={() => setViewMode('DASHBOARD')} variant="outline" className="flex items-center gap-2">
+                  <CalendarClock size={18} /> Book New Session
+                </Button>
+              </div>
+
+              {/* Telemedicine Appointments List */}
+              <div className="space-y-4">
+                {appointments.filter(apt => ['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((apt.consultationType || apt.type || '').toUpperCase())).length === 0 ? (
+                  <Card className="text-center py-12">
+                    <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Video size={32} />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900">No Telemedicine Sessions</h3>
+                    <p className="text-slate-500 mt-2 mb-6">You haven't booked any video consultations yet.</p>
+                    <Button onClick={() => setViewMode('DASHBOARD')} className="bg-purple-600 hover:bg-purple-700 text-white">
+                      Find a Doctor
+                    </Button>
+                  </Card>
+                ) : (
+                  appointments
+                    .filter(apt => ['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((apt.consultationType || apt.type || '').toUpperCase()))
+                    .sort((a, b) => new Date(`${b.date} ${b.time}`).getTime() - new Date(`${a.date} ${a.time}`).getTime()) // Newest first
+                    .map(apt => (
+                      <Card key={apt.id} className="hover:border-purple-200 transition-all border-l-4 border-l-purple-500">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
+                              <Video size={24} />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-slate-900 text-lg">{apt.doctorName}</h4>
+                              <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
+                                <span className="flex items-center gap-1"><Calendar size={14} /> {apt.date}</span>
+                                <span className="flex items-center gap-1"><Clock size={14} /> {apt.time}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 w-full md:w-auto">
+                            {apt.queueNumber && (
+                              <Badge variant="blue" className="mr-2">
+                                Queue #{apt.queueNumber}
+                              </Badge>
+                            )}
+                            <Badge variant={apt.status === 'CONFIRMED' ? 'green' : apt.status === 'COMPLETED' ? 'blue' : 'default'}>
+                              {apt.status}
+                            </Badge>
+
+                            {apt.status === 'CONFIRMED' && (
+                              <Button
+                                onClick={() => onNavigate('telemedicine', apt)}
+                                className="bg-purple-600 hover:bg-purple-700 text-white flex-1 md:flex-none"
+                              >
+                                Join Call
+                              </Button>
+                            )}
+
+                            {apt.status === 'COMPLETED' && (
+                              <Button variant="outline" className="flex-1 md:flex-none" onClick={() => handleWriteReview(apt)}>
+                                <Star size={16} className="mr-2" /> Rate
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    ))
+                )}
+              </div>
             </div>
           )}
 
@@ -885,81 +998,90 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                         <div className="h-6 bg-slate-200 rounded w-20"></div>
                       </div>
                     ))
-                  ) : appointments.length > 0 ? (
-                    appointments.map(apt => {
-                      // Handle both old and new field names
-                      const appointmentType = apt.consultationType || apt.type || 'In-Person';
-                      const isTelemedicine = appointmentType === 'ONLINE' || appointmentType === 'Telemedicine';
-                      const appointmentStatus = apt.status.toUpperCase();
+                  ) : appointments.filter(apt => !['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((apt.consultationType || apt.type || '').toUpperCase())).length > 0 ? (
+                    appointments
+                      .filter(apt => !['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((apt.consultationType || apt.type || '').toUpperCase()))
+                      .map(apt => {
+                        // Handle both old and new field names
+                        const appointmentType = apt.consultationType || apt.type || 'In-Person';
+                        const isTelemedicine = appointmentType === 'ONLINE' || appointmentType === 'Telemedicine';
+                        const appointmentStatus = apt.status.toUpperCase();
 
-                      return (
-                        <div
-                          key={apt.id}
-                          onClick={() => openQueueTracker(apt)}
-                          className={`flex flex-col md:flex-row md:items-center justify-between p-5 bg-white rounded-xl border shadow-sm transition-all cursor-pointer group ${appointmentStatus === 'CANCELLED' ? 'opacity-60 border-slate-100 bg-slate-50' : 'border-slate-100 hover:shadow-md hover:border-primary-200'}`}
-                        >
-                          <div className="flex items-center gap-5 mb-4 md:mb-0">
-                            <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-sm ${appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED' ? 'bg-green-100 text-green-600' : appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'bg-red-50 text-red-300' : 'bg-orange-100 text-orange-600'}`}>
-                              {isTelemedicine ? <Video size={24} /> : <MapPin size={24} />}
-                            </div>
-                            <div>
-                              <h3 className={`font-bold text-lg transition-colors ${appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-primary-600'}`}>{apt.doctorName}</h3>
-                              <div className="text-sm text-slate-500 space-y-1">
-                                <p className="flex items-center gap-2"><Calendar size={14} /> {new Date(apt.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>
-                                <p className="flex items-center gap-2"><Clock size={14} /> {apt.time}</p>
-                                {apt.queueNumber && (
-                                  <p className="flex items-center gap-2 text-primary-600 font-bold">
-                                    <span className="bg-primary-50 px-2 py-0.5 rounded text-xs border border-primary-100">Queue #{apt.queueNumber}</span>
-                                  </p>
-                                )}
+                        return (
+                          <div
+                            key={apt.id}
+                            onClick={() => openQueueTracker(apt)}
+                            className={`flex flex-col md:flex-row md:items-center justify-between p-5 bg-white rounded-xl border shadow-sm transition-all cursor-pointer group ${appointmentStatus === 'CANCELLED' ? 'opacity-60 border-slate-100 bg-slate-50' : 'border-slate-100 hover:shadow-md hover:border-primary-200'}`}
+                          >
+                            <div className="flex items-center gap-5 mb-4 md:mb-0">
+                              <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-sm ${appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED' ? 'bg-green-100 text-green-600' : appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'bg-red-50 text-red-300' : 'bg-orange-100 text-orange-600'}`}>
+                                {isTelemedicine ? <Video size={24} /> : <MapPin size={24} />}
+                              </div>
+                              <div>
+                                <h3 className={`font-bold text-lg transition-colors ${appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-primary-600'}`}>{apt.doctorName}</h3>
+                                <div className="text-sm text-slate-500 space-y-1">
+                                  <p className="flex items-center gap-2"><Calendar size={14} /> {new Date(apt.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                                  <p className="flex items-center gap-2"><Clock size={14} /> {apt.time}</p>
+                                  {apt.queueNumber && (
+                                    <p className="flex items-center gap-2 text-primary-600 font-bold">
+                                      <span className="bg-primary-50 px-2 py-0.5 rounded text-xs border border-primary-100">Queue #{apt.queueNumber}</span>
+                                    </p>
+                                  )}
+                                </div>
                               </div>
                             </div>
+                            <div className="text-right flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-2 md:gap-1 pl-14 md:pl-0">
+                              {/* Live Queue Tracker Button */}
+                              {(appointmentStatus === 'PENDING' || appointmentStatus === 'IN_PROGRESS' || appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openQueueTracker(apt); }}
+                                  className="w-full flex items-center justify-center gap-2 mb-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-all animate-fade-in"
+                                >
+                                  <span className="relative flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                                  </span>
+                                  Track Live Queue
+                                </button>
+                              )}
+
+                              {(appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
+                                <div className="flex items-center gap-2 mb-1 bg-green-50 px-3 py-1 rounded-full border border-green-100">
+                                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                  <span className="text-xs font-bold text-green-700">Live Queue Active</span>
+                                </div>
+                              )}
+                              <Badge color={appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED' ? 'green' : appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'red' : appointmentStatus === 'COMPLETED' ? 'blue' : 'yellow'}>{apt.status}</Badge>
+
+                              {(appointmentStatus === 'PENDING' || appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
+                                <button
+                                  onClick={(e) => handleCancelClick(e, apt.id)}
+                                  className="text-xs text-red-500 hover:text-red-700 font-medium hover:underline mt-1 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                                >
+                                  Cancel Appointment
+                                </button>
+                              )}
+
+                              {/* Review Action */}
+                              {['COMPLETED', 'CONFIRMED'].includes(apt.status) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleWriteReview(apt);
+                                  }}
+                                  className={`text-xs font-medium hover:underline mt-1 px-2 py-1 rounded transition-colors flex items-center gap-1 ${(apt as any).review
+                                    ? 'text-green-600 hover:text-green-800 hover:bg-green-50'
+                                    : 'text-primary-600 hover:text-primary-800 hover:bg-primary-50'
+                                    }`}
+                                >
+                                  {(apt as any).review ? <Edit2 size={12} /> : <Star size={12} />}
+                                  {(apt as any).review ? 'Edit Review' : 'Write Review'}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-right flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-2 md:gap-1 pl-14 md:pl-0">
-                            {/* Live Queue Tracker Button */}
-                            {(appointmentStatus === 'PENDING' || appointmentStatus === 'IN_PROGRESS' || appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); openQueueTracker(apt); }}
-                                className="w-full flex items-center justify-center gap-2 mb-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-all animate-fade-in"
-                              >
-                                <span className="relative flex h-3 w-3">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
-                                </span>
-                                Track Live Queue
-                              </button>
-                            )}
-
-                            {(appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
-                              <div className="flex items-center gap-2 mb-1 bg-green-50 px-3 py-1 rounded-full border border-green-100">
-                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                                <span className="text-xs font-bold text-green-700">Live Queue Active</span>
-                              </div>
-                            )}
-                            <Badge color={appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED' ? 'green' : appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'red' : appointmentStatus === 'COMPLETED' ? 'blue' : 'yellow'}>{apt.status}</Badge>
-
-                            {(appointmentStatus === 'PENDING' || appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
-                              <button
-                                onClick={(e) => handleCancelClick(e, apt.id)}
-                                className="text-xs text-red-500 hover:text-red-700 font-medium hover:underline mt-1 px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                              >
-                                Cancel Appointment
-                              </button>
-                            )}
-
-                            {appointmentStatus === 'COMPLETED' && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleWriteReview(apt); }}
-                                className="text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline mt-1 px-2 py-1 rounded hover:bg-primary-50 transition-colors flex items-center gap-1"
-                              >
-                                <Star size={12} />
-                                Write Review
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })
+                        )
+                      })
                   ) : (
                     <div className="text-center py-16 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                       <Calendar size={48} className="mx-auto text-slate-300 mb-4" />
@@ -991,10 +1113,13 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
               {/* Review Modal */}
               {isReviewModalOpen && reviewDoctorId && reviewAppointmentId && (
                 <ReviewModal
+                  isOpen={isReviewModalOpen}
                   doctorId={reviewDoctorId}
+                  doctorName={reviewDoctorName}
                   appointmentId={reviewAppointmentId}
+                  initialData={reviewInitialData}
                   onClose={() => setIsReviewModalOpen(false)}
-                  onSubmitSuccess={handleReviewSubmit}
+                  onReviewSubmitted={handleReviewSubmit}
                 />
               )}
             </div>
@@ -1197,7 +1322,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 };

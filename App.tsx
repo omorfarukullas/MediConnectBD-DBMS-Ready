@@ -141,12 +141,20 @@ const App = () => {
     setCurrentView('home');
   };
 
+  const [activeAppointment, setActiveAppointment] = useState<any>(null);
+
+  // Enhanced navigation handler
+  const handleNavigate = (view: string, data?: any) => {
+    if (data) setActiveAppointment(data);
+    setCurrentView(view);
+  };
+
   // View Router Logic
   const renderView = () => {
     console.log('🔄 Rendering view:', currentView, '| User:', currentUser?.email || 'Not logged in');
 
     if (currentView === 'emergency') return <EmergencyView onBack={() => setCurrentView(currentUser ? 'patient' : 'home')} />;
-    if (currentView === 'telemedicine') return <TelemedicineView onEndCall={() => setCurrentView('patient')} />;
+    if (currentView === 'telemedicine') return <TelemedicineView appointment={activeAppointment} userRole={currentUser?.role} onEndCall={() => setCurrentView(currentUser?.role === 'DOCTOR' ? 'doctor' : 'patient')} />;
     if (currentView === 'hospital_registration') return <HospitalRegistration onBack={() => setCurrentView('home')} />;
     if (currentView === 'hospital_login') return <HospitalLogin onBack={() => setCurrentView('home')} onLoginSuccess={handleHospitalAdminLogin} />;
 
@@ -201,11 +209,13 @@ const App = () => {
     }
 
     switch (currentView) {
-      case 'patient': return <PatientPortal currentUser={currentUser} onNavigate={setCurrentView} onBack={handleLogout} initialMode="DASHBOARD" />;
-      case 'patient_appointments': return <PatientPortal currentUser={currentUser} onNavigate={setCurrentView} onBack={handleLogout} initialMode="MY_APPOINTMENTS" />;
-      case 'patient_settings': return <PatientPortal currentUser={currentUser} onNavigate={setCurrentView} onBack={handleLogout} initialMode="SETTINGS" />;
-      case 'medical_history': return <PatientPortal currentUser={currentUser} onNavigate={setCurrentView} onBack={handleLogout} initialMode="MEDICAL_HISTORY" />;
-      case 'doctor': return <DoctorPortal currentUser={currentUser} onNavigate={setCurrentView} onBack={handleLogout} />;
+      case 'patient': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="DASHBOARD" />;
+      case 'patient_appointments': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="MY_APPOINTMENTS" />;
+      case 'patient_settings': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="SETTINGS" />;
+      case 'medical_history': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="MEDICAL_HISTORY" />;
+      case 'patient_telemedicine': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="TELEMEDICINE" />;
+      case 'patient_resources': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="HOSPITAL_RESOURCES" />;
+      case 'doctor': return <DoctorPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} />;
       case 'admin': return <AdminPortal currentUser={currentUser} onBack={handleLogout} />;
       case 'super_admin': return <SuperAdminPortal onBack={handleLogout} />;
       default: return <div>View Not Found</div>;
@@ -217,7 +227,8 @@ const App = () => {
     'telemedicine', 'emergency', 'hospital_registration',
     'hospital_login', 'patient_login', 'patient_registration',
     'doctor_login', 'doctor_registration', 'super_admin_login',
-    'doctor', 'admin', 'patient', 'patient_appointments', 'patient_settings', 'medical_history'
+    'doctor', 'admin', 'patient', 'patient_appointments', 'patient_settings', 'medical_history', 'patient_telemedicine', 'patient_resources',
+    'super_admin'  // Super Admin Portal has its own sidebar
   ].includes(currentView);
 
   return (

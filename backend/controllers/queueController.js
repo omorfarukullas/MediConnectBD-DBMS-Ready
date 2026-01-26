@@ -13,7 +13,10 @@ const pool = require('../config/db');
  */
 const getTodayQueue = async (req, res) => {
     const { doctorId } = req.params;
+    const consultationType = req.query.consultationType?.toUpperCase(); // NEW: Filter parameter
     const today = new Date().toISOString().split('T')[0];
+
+    const dateFilter = req.query.date || null; // Support explicit date from client
 
     try {
         // Verify the requesting user is the doctor or admin
@@ -24,8 +27,8 @@ const getTodayQueue = async (req, res) => {
             });
         }
 
-        const [appointments] = await pool.execute(
-            `SELECT 
+        // Build query with optional consultation_type filter
+        let query = `SELECT 
                 a.id,
                 a.patient_id,
                 a.appointment_date,
@@ -36,25 +39,50 @@ const getTodayQueue = async (req, res) => {
                 a.reason_for_visit,
                 a.started_at,
                 a.completed_at,
-                a.completed_at,
                 p.full_name as patient_name,
                 p.phone
             FROM appointments a
             LEFT JOIN patients p ON a.patient_id = p.id
             LEFT JOIN appointment_queue aq ON a.id = aq.appointment_id
             WHERE a.doctor_id = ? 
-            AND a.appointment_date = ?
-            AND a.status != 'CANCELLED'
-            ORDER BY a.appointment_time ASC, aq.queue_number ASC`,
-            [doctorId, today]
-        );
+            AND a.appointment_date = ${dateFilter ? '?' : 'CURDATE()'}
+            AND a.status != 'CANCELLED'`;
 
-        // Calculate queue statistics
+        const queryParams = [doctorId];
+        if (dateFilter) queryParams.push(dateFilter);
+
+        // Add consultation_type filter if provided
+        if (consultationType && ['PHYSICAL', 'TELEMEDICINE'].includes(consultationType)) {
+            query += ' AND a.consultation_type = ?';
+            queryParams.push(consultationType);
+        }
+
+        query += ' ORDER BY a.appointment_time ASC, aq.queue_number ASC';
+
+        const [appointments] = await pool.execute(query, queryParams);
+
+        // Calculate overall queue statistics
         const stats = {
             total: appointments.length,
             waiting: appointments.filter(a => a.status === 'PENDING' || a.status === 'CONFIRMED').length,
             inProgress: appointments.filter(a => a.status === 'IN_PROGRESS').length,
             completed: appointments.filter(a => a.status === 'COMPLETED').length
+        };
+
+        // Calculate statistics by consultation type
+        const statsByType = {
+            physical: {
+                total: appointments.filter(a => a.consultation_type === 'PHYSICAL').length,
+                waiting: appointments.filter(a => (a.status === 'PENDING' || a.status === 'CONFIRMED') && a.consultation_type === 'PHYSICAL').length,
+                inProgress: appointments.filter(a => a.status === 'IN_PROGRESS' && a.consultation_type === 'PHYSICAL').length,
+                completed: appointments.filter(a => a.status === 'COMPLETED' && a.consultation_type === 'PHYSICAL').length
+            },
+            telemedicine: {
+                total: appointments.filter(a => a.consultation_type === 'TELEMEDICINE').length,
+                waiting: appointments.filter(a => (a.status === 'PENDING' || a.status === 'CONFIRMED') && a.consultation_type === 'TELEMEDICINE').length,
+                inProgress: appointments.filter(a => a.status === 'IN_PROGRESS' && a.consultation_type === 'TELEMEDICINE').length,
+                completed: appointments.filter(a => a.status === 'COMPLETED' && a.consultation_type === 'TELEMEDICINE').length
+            }
         };
 
         // Find current patient
@@ -77,12 +105,15 @@ const getTodayQueue = async (req, res) => {
                     completedAt: a.completed_at
                 })),
                 stats,
+                statsByType, // NEW: Statistics separated by consultation type
                 currentPatient: currentPatient ? {
                     id: currentPatient.id,
                     queueNumber: currentPatient.queue_number,
-                    patientName: currentPatient.patient_name
+                    patientName: currentPatient.patient_name,
+                    consultationType: currentPatient.consultation_type
                 } : null,
-                date: today
+                date: today,
+                filter: consultationType || 'ALL' // NEW: Show active filter
             }
         });
     } catch (error) {

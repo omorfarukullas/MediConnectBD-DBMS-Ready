@@ -12,6 +12,7 @@ import { NotificationBell } from '../components/NotificationBell';
 import { DoctorAppointmentList } from '../components/DoctorAppointmentList';
 import QueueDashboard from '../components/QueueDashboard';
 import SlotManagement from '../components/SlotManagement';
+import { DoctorReviews } from '../components/ReviewSystem';
 import { api } from '../services/apiClient';
 
 interface DoctorPortalProps {
@@ -33,6 +34,10 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
     const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
     const [doctorProfile, setDoctorProfile] = useState<any>(null);
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+    // Earnings State
+    const [earnings, setEarnings] = useState<any>(null);
+    const [isLoadingEarnings, setIsLoadingEarnings] = useState(false);
 
     // Fetch appointments and doctor profile on mount
     useEffect(() => {
@@ -84,6 +89,30 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
             fetchData();
         }
     }, [currentUser]);
+
+    // Fetch earnings when switching to earnings view
+    useEffect(() => {
+        if (activeView === 'EARNINGS') {
+            const fetchEarnings = async () => {
+                try {
+                    setIsLoadingEarnings(true);
+                    console.log('💰 Fetching earnings data...');
+                    const data = await api.getDoctorEarnings();
+                    console.log('✅ Earnings API Response:', data);
+                    console.log('📊 Total Earnings:', data?.totalEarnings);
+                    console.log('📊 Telemedicine:', data?.telemedicine);
+                    console.log('📊 Physical:', data?.physical);
+                    setEarnings(data);
+                } catch (err) {
+                    console.error('❌ Error fetching earnings:', err);
+                    setEarnings(null);
+                } finally {
+                    setIsLoadingEarnings(false);
+                }
+            };
+            fetchEarnings();
+        }
+    }, [activeView]);
 
     // Use currentUser or default to mock if testing without login
     const doctorName = currentUser?.name || 'Dr. Omor Faruck';
@@ -307,54 +336,70 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                     {/* VIEW: EARNINGS */}
                     {activeView === 'EARNINGS' && (
                         <div className="space-y-6 animate-fade-in">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <Card className="bg-slate-900 text-white">
-                                    <p className="text-slate-400 font-medium mb-1">Total Earnings (This Month)</p>
-                                    <h2 className="text-4xl font-bold mb-4">৳ 125,000</h2>
-                                    <Button className="w-full bg-primary-600 border-none hover:bg-primary-700">Withdraw Funds</Button>
-                                </Card>
-                                <Card>
-                                    <p className="text-slate-500 font-medium mb-1">Pending Clearance</p>
-                                    <h2 className="text-3xl font-bold text-slate-800">৳ 15,000</h2>
-                                    <p className="text-xs text-slate-400 mt-2">Will be available in 2 days</p>
-                                </Card>
-                                <Card>
-                                    <p className="text-slate-500 font-medium mb-1">Platform Commission (10%)</p>
-                                    <h2 className="text-3xl font-bold text-red-600">- ৳ 12,500</h2>
-                                    <p className="text-xs text-slate-400 mt-2">Automatically deducted</p>
-                                </Card>
-                            </div>
+                            {isLoadingEarnings ? (
+                                <div className="text-center py-12">
+                                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+                                    <p className="text-slate-500">Loading earnings data...</p>
+                                </div>
+                            ) : earnings ? (
+                                <>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <Card className="bg-slate-900 text-white">
+                                            <p className="text-slate-400 font-medium mb-1">Total Earnings</p>
+                                            <h2 className="text-4xl font-bold mb-2">৳ {(earnings?.totalEarnings || 0).toLocaleString()}</h2>
+                                            <p className="text-xs text-slate-400">From {(earnings?.telemedicine?.count || 0) + (earnings?.physical?.count || 0)} completed appointments</p>
+                                        </Card>
+                                        <Card className="bg-purple-50 border-purple-100">
+                                            <p className="text-purple-600 font-medium mb-1">Telemedicine Earnings</p>
+                                            <h2 className="text-3xl font-bold text-purple-900">৳ {(earnings?.telemedicine?.earnings || 0).toLocaleString()}</h2>
+                                            <p className="text-xs text-purple-600 mt-2">{earnings?.telemedicine?.count || 0} online consultations</p>
+                                        </Card>
+                                        <Card className="bg-blue-50 border-blue-100">
+                                            <p className="text-blue-600 font-medium mb-1">Physical Earnings</p>
+                                            <h2 className="text-3xl font-bold text-blue-900">৳ {(earnings?.physical?.earnings || 0).toLocaleString()}</h2>
+                                            <p className="text-xs text-blue-600 mt-2">{earnings?.physical?.count || 0} physical visits</p>
+                                        </Card>
+                                    </div>
 
-                            <Card>
-                                <h3 className="font-bold text-lg mb-4">Transaction History</h3>
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-slate-50 text-slate-500">
-                                        <tr>
-                                            <th className="p-3">Date</th>
-                                            <th className="p-3">Patient</th>
-                                            <th className="p-3">Service</th>
-                                            <th className="p-3">Amount</th>
-                                            <th className="p-3">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr className="border-b">
-                                            <td className="p-3">Oct 26, 2023</td>
-                                            <td className="p-3">Rahim Uddin</td>
-                                            <td className="p-3">Online Consultation</td>
-                                            <td className="p-3 font-bold text-green-600">+ ৳1000</td>
-                                            <td className="p-3"><Badge color="green">Paid</Badge></td>
-                                        </tr>
-                                        <tr className="border-b">
-                                            <td className="p-3">Oct 26, 2023</td>
-                                            <td className="p-3">Karim Ahmed</td>
-                                            <td className="p-3">Physical Visit</td>
-                                            <td className="p-3 font-bold text-green-600">+ ৳1500</td>
-                                            <td className="p-3"><Badge color="green">Paid</Badge></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </Card>
+                                    <Card>
+                                        <h3 className="font-bold text-lg mb-4">Recent Completed Appointments</h3>
+                                        {earnings.transactions.length === 0 ? (
+                                            <div className="text-center py-8 text-slate-500">
+                                                <p>No completed appointments yet</p>
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-sm text-left">
+                                                    <thead className="bg-slate-50 text-slate-500">
+                                                        <tr>
+                                                            <th className="p-3">Date</th>
+                                                            <th className="p-3">Patient</th>
+                                                            <th className="p-3">Service</th>
+                                                            <th className="p-3">Amount</th>
+                                                            <th className="p-3">Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {earnings.transactions.map((transaction: any) => (
+                                                            <tr key={transaction.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                                                <td className="p-3">{transaction.date}</td>
+                                                                <td className="p-3">{transaction.patientName}</td>
+                                                                <td className="p-3">{transaction.service}</td>
+                                                                <td className="p-3 font-bold text-green-600">+ ৳{transaction.amount}</td>
+                                                                <td className="p-3"><Badge color="green">{transaction.status}</Badge></td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </Card>
+                                </>
+                            ) : (
+                                <Card className="text-center py-12">
+                                    <p className="text-slate-500">Unable to load earnings data</p>
+                                </Card>
+                            )}
                         </div>
                     )}
 
@@ -368,7 +413,7 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                                 </div>
                             </div>
                             <DoctorAppointmentList
-                                appointments={appointments}
+                                appointments={appointments.filter(a => !['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((a.consultationType || a.type || '').toUpperCase()))}
                                 onRefresh={async () => {
                                     const appointmentsResponse = await api.getAppointments();
                                     const appointmentsData = appointmentsResponse.data || appointmentsResponse;
@@ -385,10 +430,81 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                         </div>
                     )}
 
+
+                    {/* VIEW: TELEMEDICINE */}
+                    {activeView === 'TELEMEDICINE' && (
+                        <div className="space-y-6 animate-fade-in">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-slate-900">Telemedicine Appointments</h2>
+                                    <p className="text-gray-600 mt-1">Manage your video consultations (Past & Upcoming)</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" className="flex items-center gap-2">
+                                        <CalendarClock size={18} /> Schedule New
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Stats for Telemedicine */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <Card className="bg-purple-50 border-purple-100">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-3 bg-purple-100 text-purple-600 rounded-lg">
+                                            <Video size={24} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-purple-600 font-medium">Total Sessions</p>
+                                            <h3 className="text-2xl font-bold text-purple-900">
+                                                {appointments.filter(a => ['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((a.consultationType || a.type || '').toUpperCase())).length}
+                                            </h3>
+                                        </div>
+                                    </div>
+                                </Card>
+                                <Card className="bg-blue-50 border-blue-100">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-3 bg-blue-100 text-blue-600 rounded-lg">
+                                            <Clock size={24} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-blue-600 font-medium">Upcoming</p>
+                                            <h3 className="text-2xl font-bold text-blue-900">
+                                                {appointments.filter(a => ['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((a.consultationType || a.type || '').toUpperCase()) && a.status !== 'COMPLETED').length}
+                                            </h3>
+                                        </div>
+                                    </div>
+                                </Card>
+                            </div>
+
+                            <DoctorAppointmentList
+                                appointments={appointments.filter(a => ['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((a.consultationType || a.type || '').toUpperCase()))}
+                                onRefresh={async () => {
+                                    const appointmentsResponse = await api.getAppointments();
+                                    const appointmentsData = appointmentsResponse.data || appointmentsResponse;
+                                    setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
+                                }}
+                                onStartCall={(apt) => onNavigate('telemedicine', apt)}
+                            />
+                        </div>
+                    )}
+
+                    {/* VIEW: FEEDBACK */}
+                    {activeView === 'FEEDBACK' && (
+                        <div className="space-y-6 animate-fade-in">
+                            <h2 className="text-2xl font-bold text-slate-900">Patient Feedback</h2>
+                            <p className="text-gray-600 mt-1">See what your patients are saying about you</p>
+
+                            {/* DEBUG: Log what we are passing */}
+                            {console.log('⭐ Rendering DoctorReviews with ID:', (currentUser as any)?.profileId || doctorProfile?.id, 'Profile:', doctorProfile)}
+
+                            <DoctorReviews doctorId={(currentUser as any)?.profileId || doctorProfile?.id || 1} />
+                        </div>
+                    )}
+
                     {/* Placeholder for other views */}
-                    {(activeView === 'TELEMEDICINE' || activeView === 'RECORDS' || activeView === 'FEEDBACK') && (
+                    {activeView === 'RECORDS' && (
                         <div className="flex items-center justify-center h-64 text-slate-400">
-                            <p>View content for {activeView} is under development.</p>
+                            <p>View content for RECORDS is under development.</p>
                         </div>
                     )}
                 </div>

@@ -248,6 +248,10 @@ class ApiService {
     return this.http.get(`/doctors/${id}`);
   }
 
+  async getDoctorEarnings(): Promise<any> {
+    return this.http.get('/doctors/earnings');
+  }
+
   // ==================== Appointments ====================
 
   async getAppointments(): Promise<any> {
@@ -307,6 +311,10 @@ class ApiService {
 
   async deleteReview(id: number) {
     return this.http.delete(`/reviews/${id}`);
+  }
+
+  async getAllReviews() {
+    return this.http.get('/reviews/hospital');
   }
 
   // ==================== Notifications ====================
@@ -610,6 +618,58 @@ class ApiService {
 
   async toggleSlotStatus(slotId: number) {
     return this.http.patch(`/hospital-admin/slots/${slotId}/toggle`, {});
+  }
+
+  // ==================== Audit Logging (Super Admin) ====================
+
+  async getAuditLogs(filters?: {
+    action_type?: string;
+    entity_type?: string;
+    user_id?: number;
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    const queryParams = new URLSearchParams(filters as any).toString();
+    return this.http.get(`/audit/logs${queryParams ? `?${queryParams}` : ''}`);
+  }
+
+  async getSystemStats(): Promise<any> {
+    return this.http.get('/audit/stats');
+  }
+
+  // ==================== Super Admin (User Management) ====================
+
+  async getSuperAdminUsers(filters?: { role?: string; search?: string }): Promise<any> {
+    const queryParams = new URLSearchParams(filters as any).toString();
+    return this.http.get(`/super-admin/users${queryParams ? `?${queryParams}` : ''}`);
+  }
+
+  async createSuperAdminUser(userData: {
+    email: string;
+    password: string;
+    role: string;
+    name: string;
+    phone?: string;
+    specialization?: string;
+    consultationFee?: number;
+  }): Promise<any> {
+    return this.http.post('/super-admin/users', userData);
+  }
+
+  async updateSuperAdminUser(userId: number, userData: {
+    email?: string;
+    is_active?: boolean;
+    is_verified?: boolean;
+    name?: string;
+    phone?: string;
+  }): Promise<any> {
+    return this.http.put(`/super-admin/users/${userId}`, userData);
+  }
+
+  async deleteSuperAdminUser(userId: number): Promise<any> {
+    return this.http.delete(`/super-admin/users/${userId}`);
   }
 
   // ==================== Generic Methods ====================

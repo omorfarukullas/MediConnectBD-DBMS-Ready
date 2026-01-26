@@ -4,7 +4,8 @@ const {
     getDoctorReviews,
     getMyReviews,
     updateReview,
-    deleteReview
+    deleteReview,
+    getHospitalReviews
 } = require('../controllers/reviewController');
 const { protect, patientOnly, authorize } = require('../middleware/authMiddleware');
 
@@ -16,6 +17,7 @@ router.get('/doctor/:doctorId', getDoctorReviews);
 // Protected routes (requires authentication)
 router.post('/', protect, patientOnly, createReview);
 router.get('/my-reviews', protect, getMyReviews);
+router.get('/hospital', protect, authorize('ADMIN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'), getHospitalReviews);
 router.put('/:id', protect, updateReview);
 router.delete('/:id', protect, deleteReview);
 

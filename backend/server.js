@@ -104,6 +104,9 @@ app.use('/api/hospital-admin', hospitalAdminRoutes);
 app.use('/api/hospitals', hospitalRoutes);
 // Super Admin routes (system-wide administration)
 app.use('/api/super-admin', superAdminRoutes);
+// Audit logging routes (Super Admin only)
+app.use('/api/audit', require('./routes/auditRoutes'));
+
 
 // Socket.IO authentication middleware
 io.use((socket, next) => {

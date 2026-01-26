@@ -13,9 +13,10 @@ const getMyAppointments = async (req, res) => {
     try {
         // Determine which field to filter by based on user role
         const whereField = req.user.role === 'DOCTOR' ? 'doctor_id' : 'patient_id';
+        const consultationType = req.query.consultationType?.toUpperCase(); // NEW: Filter parameter
 
         // Raw SQL query with JOIN - using ? placeholder for security
-        const query = `
+        let query = `
             SELECT 
                 a.id,
                 a.patient_id,
@@ -38,7 +39,10 @@ const getMyAppointments = async (req, res) => {
                 du.email as doctor_email,
                 d.specialization as doctor_specialization,
                 h.city as doctor_city,
-                d.consultation_fee
+                d.consultation_fee,
+                r.id as review_id,
+                r.rating as review_rating,
+                r.comment as review_comment
             FROM appointments a
             LEFT JOIN appointment_queue aq ON a.id = aq.appointment_id
             LEFT JOIN patients p ON a.patient_id = p.id
@@ -46,11 +50,20 @@ const getMyAppointments = async (req, res) => {
             LEFT JOIN doctors d ON a.doctor_id = d.id
             LEFT JOIN users du ON d.user_id = du.id
             LEFT JOIN hospitals h ON d.hospital_id = h.id
-            WHERE a.${whereField} = ?
-            ORDER BY a.appointment_date DESC, a.appointment_time DESC
-        `;
+            LEFT JOIN reviews r ON a.id = r.appointment_id
+            WHERE a.${whereField} = ?`;
 
-        const [appointments] = await pool.execute(query, [req.user.profile_id]);
+        const queryParams = [req.user.profile_id];
+
+        // Add consultation_type filter if provided
+        if (consultationType && ['PHYSICAL', 'TELEMEDICINE'].includes(consultationType)) {
+            query += ' AND a.consultation_type = ?';
+            queryParams.push(consultationType);
+        }
+
+        query += ' ORDER BY a.appointment_date DESC, a.appointment_time DESC';
+
+        const [appointments] = await pool.execute(query, queryParams);
 
         console.log(`✅ Found ${appointments.length} appointments`);
 
@@ -66,7 +79,7 @@ const getMyAppointments = async (req, res) => {
             date: apt.date,
             time: apt.time, // This is Session Start Time
             appointmentType: apt.appointment_type || 'physical',
-            consultationType: apt.appointment_type === 'telemedicine' ? 'Telemedicine' : 'In-Person',
+            consultationType: (apt.appointment_type || '').toUpperCase() === 'TELEMEDICINE' ? 'Telemedicine' : 'In-Person',
             consultationFee: apt.consultation_fee,
             reasonForVisit: apt.reason_for_visit || '',
             status: apt.status,
@@ -76,7 +89,12 @@ const getMyAppointments = async (req, res) => {
             startedAt: apt.started_at,
             completedAt: apt.completed_at,
             createdAt: apt.created_at,
-            updatedAt: apt.updated_at
+            updatedAt: apt.updated_at,
+            review: apt.review_id ? {
+                id: apt.review_id,
+                rating: apt.review_rating,
+                comment: apt.review_comment
+            } : null
         }));
 
         res.json({
@@ -180,6 +198,34 @@ const bookAppointment = async (req, res) => {
             });
         }
 
+        // Step 2.5: Validate appointmentType
+        const requestedType = req.body.appointmentType?.toUpperCase() || 'PHYSICAL';
+
+        // Validate appointmentType is a valid value
+        if (!['PHYSICAL', 'TELEMEDICINE'].includes(requestedType)) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid appointment type. Must be "PHYSICAL" or "TELEMEDICINE"'
+            });
+        }
+
+        // Validate appointmentType matches slot capability
+        if (rule.consultation_type !== 'BOTH' && rule.consultation_type !== requestedType) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `This slot only supports ${rule.consultation_type} appointments. Please select a ${rule.consultation_type === 'PHYSICAL' ? 'physical' : 'telemedicine'} slot.`,
+                slotType: rule.consultation_type,
+                requestedType: requestedType
+            });
+        }
+
+        // Determine final consultation type
+        const finalConsultationType = rule.consultation_type === 'BOTH' ? requestedType : rule.consultation_type;
+
+        console.log(`✅ Consultation Type Validation: Slot=${rule.consultation_type}, Requested=${requestedType}, Final=${finalConsultationType}`);
+
         // Step 3: Check Current Capacity for this Session
         // We count appointments for this doctor + date + time (session start)
         const [counts] = await connection.execute(
@@ -226,7 +272,7 @@ const bookAppointment = async (req, res) => {
             [
                 patientId,
                 doctorId,
-                rule.consultation_type === 'BOTH' ? ((req.body.appointmentType || 'physical').toUpperCase()) : rule.consultation_type,
+                finalConsultationType, // Use validated consultation type
                 appointmentDate,
                 appointmentTime,
                 symptoms || 'General consultation',
@@ -282,7 +328,7 @@ const bookAppointment = async (req, res) => {
                 date: appointmentDate,
                 startTime: appointmentTime,
                 endTime: rule.end_time, // Return session end time
-                appointmentType: rule.consultation_type,
+                appointmentType: finalConsultationType, // Return actual booked type
                 consultationFee: rule.consultation_fee,
                 status: 'CONFIRMED',
                 queueNumber: queueNumber,

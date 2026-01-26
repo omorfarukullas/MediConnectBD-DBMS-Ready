@@ -1,5 +1,6 @@
 const express = require('express');
-const { authDoctor, getDoctors, getDoctorById } = require('../controllers/doctorController');
+const { authDoctor, getDoctors, getDoctorById, getDoctorEarnings } = require('../controllers/doctorController');
+const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -8,6 +9,9 @@ const router = express.Router();
 
 // Doctor Login (Public)
 router.post('/login', authDoctor);
+
+// Get Doctor Earnings (Private) - MUST come before /:id route
+router.get('/earnings', protect, getDoctorEarnings);
 
 // Get Doctors (Public)
 router.get('/', getDoctors);

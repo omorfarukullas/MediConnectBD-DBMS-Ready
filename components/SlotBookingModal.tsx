@@ -74,12 +74,24 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
             );
 
             if (response.data.success) {
+                // Helper to recalculate spots
+                const recalculateSlots = (slots: Session[]) => slots.map(slot => ({
+                    ...slot,
+                    // Force calculation to ensure accuracy if backend sends stale data
+                    available_spots: Math.max(0, slot.max_appointments - (slot.current_bookings || 0))
+                }));
+
                 // Use slotsByDate if available, otherwise group manually
                 if (response.data.slotsByDate) {
-                    setSessionsByDate(response.data.slotsByDate);
+                    const processedSlotsByDate: SessionsByDate = {};
+                    Object.keys(response.data.slotsByDate).forEach(date => {
+                        processedSlotsByDate[date] = recalculateSlots(response.data.slotsByDate[date]);
+                    });
+                    setSessionsByDate(processedSlotsByDate);
                 } else {
                     // Fallback: group slots by date
-                    const grouped = response.data.slots.reduce((acc, slot) => {
+                    const processedSlots = recalculateSlots(response.data.slots);
+                    const grouped = processedSlots.reduce((acc, slot) => {
                         const date = slot.slot_date.split('T')[0];
                         if (!acc[date]) acc[date] = [];
                         acc[date].push(slot);
@@ -187,8 +199,8 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                             <div
                                 onClick={() => setAppointmentType('physical')}
                                 className={`p-6 rounded-lg border-2 cursor-pointer transition ${appointmentType === 'physical'
-                                        ? 'border-green-500 bg-green-50'
-                                        : 'border-gray-200 hover:border-green-300'
+                                    ? 'border-green-500 bg-green-50'
+                                    : 'border-gray-200 hover:border-green-300'
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
@@ -209,8 +221,8 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                             <div
                                 onClick={() => setAppointmentType('telemedicine')}
                                 className={`p-6 rounded-lg border-2 cursor-pointer transition ${appointmentType === 'telemedicine'
-                                        ? 'border-purple-500 bg-purple-50'
-                                        : 'border-gray-200 hover:border-purple-300'
+                                    ? 'border-purple-500 bg-purple-50'
+                                    : 'border-gray-200 hover:border-purple-300'
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
@@ -283,10 +295,10 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                                                         key={session.id}
                                                         onClick={() => session.available_spots > 0 && setSelectedSession(session)}
                                                         className={`p-4 rounded-lg border-2 cursor-pointer transition ${selectedSession?.id === session.id
-                                                                ? 'border-blue-500 bg-blue-50'
-                                                                : session.available_spots > 0
-                                                                    ? 'border-gray-200 hover:border-blue-300 bg-white'
-                                                                    : 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                                                            ? 'border-blue-500 bg-blue-50'
+                                                            : session.available_spots > 0
+                                                                ? 'border-gray-200 hover:border-blue-300 bg-white'
+                                                                : 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
                                                             }`}
                                                     >
                                                         <div className="flex items-center justify-between">

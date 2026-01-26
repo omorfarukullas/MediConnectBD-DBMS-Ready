@@ -5,6 +5,8 @@ const {
     rejectHospital,
     getSystemStats,
     getAllUsers,
+    createUser,
+    updateUser,
     deleteUser,
     getAllHospitals
 } = require('../controllers/superAdminController');
@@ -22,8 +24,10 @@ router.get('/hospitals/pending', getPendingHospitals);
 router.put('/hospitals/:id/approve', approveHospital);
 router.put('/hospitals/:id/reject', rejectHospital);
 
-// User management
+// User management (CRUD)
 router.get('/users', getAllUsers);
+router.post('/users', createUser);
+router.put('/users/:id', updateUser);
 router.delete('/users/:id', deleteUser);
 
 // System statistics

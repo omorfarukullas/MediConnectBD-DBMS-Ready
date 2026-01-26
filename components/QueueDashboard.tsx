@@ -57,7 +57,8 @@ const QueueDashboard: React.FC = () => {
 
         try {
             setLoading(true);
-            const response = await api.get(`/queue/doctor/${doctorId}/today`);
+            const localDate = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+            const response = await api.get(`/queue/doctor/${doctorId}/today?date=${localDate}`);
             if (response.data.success) {
                 setQueueData(response.data.data);
                 setError(null);

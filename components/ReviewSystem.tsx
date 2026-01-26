@@ -28,7 +28,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (rating === 0) {
       setError('Please select a rating');
       return;
@@ -43,12 +43,14 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
     setError('');
 
     try {
-      await api.createReview({
+      console.log('📝 Submitting review...', { doctorId, appointmentId, rating, comment });
+      const response = await api.createReview({
         doctorId,
         appointmentId,
         rating,
         comment: comment.trim()
       });
+      console.log('✅ Review submitted successfully:', response);
 
       // Success
       setRating(0);
@@ -56,6 +58,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       onReviewSubmitted?.();
       onClose();
     } catch (err: any) {
+      console.error('❌ Review submission failed:', err);
       setError(err.message || 'Failed to submit review');
     } finally {
       setIsSubmitting(false);
@@ -93,11 +96,10 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               >
                 <Star
                   size={40}
-                  className={`${
-                    star <= (hoveredRating || rating)
+                  className={`${star <= (hoveredRating || rating)
                       ? 'text-yellow-400 fill-yellow-400'
                       : 'text-slate-300'
-                  } transition-colors`}
+                    } transition-colors`}
                 />
               </button>
             ))}
@@ -180,7 +182,7 @@ export const DoctorReviews: React.FC<DoctorReviewsProps> = ({ doctorId, classNam
       setIsLoading(true);
       const data: any = await api.getDoctorReviews(doctorId);
       setReviews(data.reviews || []);
-      
+
       // Calculate average rating
       if (data.reviews && data.reviews.length > 0) {
         const avg = data.reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / data.reviews.length;
@@ -200,9 +202,8 @@ export const DoctorReviews: React.FC<DoctorReviewsProps> = ({ doctorId, classNam
           <Star
             key={star}
             size={16}
-            className={`${
-              star <= rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'
-            }`}
+            className={`${star <= rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'
+              }`}
           />
         ))}
       </div>

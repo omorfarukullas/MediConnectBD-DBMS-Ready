@@ -5,7 +5,8 @@ import {
     Ambulance, Building2, CreditCard, Star, Settings, LogOut,
     Menu, Bell, Plus, Filter, Search, MoreVertical, MapPin,
     Activity, CheckCircle, Edit3, Save, AlertCircle, Trash2, X, AlertTriangle,
-    ChevronDown, Check, UserPlus, Play, Pause, RotateCcw, Mic, Monitor, ArrowLeft
+    ChevronDown, Check, UserPlus, Play, Pause, RotateCcw, Mic, Monitor, ArrowLeft,
+    MessageCircle, TrendingUp
 } from 'lucide-react';
 import {
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -122,6 +123,30 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
         return () => clearInterval(interval);
     }, []);
 
+    // Feedback State
+    const [reviews, setReviews] = useState<any[]>([]);
+    const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+
+    // Fetch reviews when on Feedback view
+    useEffect(() => {
+        if (activeView === 'FEEDBACK') {
+            const fetchReviews = async () => {
+                try {
+                    setIsLoadingReviews(true);
+                    console.log('🔍 Fetching hospital reviews...');
+                    const data: any = await api.getAllReviews();
+                    setReviews(data.reviews || []);
+                    console.log('✅ Fetched reviews:', data.reviews?.length);
+                } catch (err) {
+                    console.error('❌ Error fetching reviews:', err);
+                } finally {
+                    setIsLoadingReviews(false);
+                }
+            };
+            fetchReviews();
+        }
+    }, [activeView]);
+
     // Fetch hospital resources on mount
     useEffect(() => {
         const fetchResources = async () => {
@@ -153,7 +178,135 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
             }
         };
         fetchResources();
+
+        // Fetch Appointments
+        const fetchAppointments = async () => {
+            try {
+                const appointmentsData = await api.getHospitalAppointments();
+                // Map API data to Appointment type if needed, or cast it.
+                // API returns snake_case (consultation_type), frontend might expect camelCase
+                // Let's map it to be safe
+                const formattedAppointments = (appointmentsData as any[]).map(apt => ({
+                    id: apt.id.toString(),
+                    patientId: apt.patient_id,
+                    patientName: apt.patient_name || 'Unknown',
+                    doctorId: apt.doctor_id,
+                    doctorName: apt.doctor_name || 'Unknown',
+                    date: apt.appointment_date,
+                    time: apt.appointment_time,
+                    type: apt.consultation_type === 'TELEMEDICINE' ? 'Telemedicine' : 'In-Person',
+                    consultationType: apt.consultation_type === 'TELEMEDICINE' ? 'Telemedicine' : 'In-Person',
+                    status: apt.status,
+                    symptoms: apt.reason_for_visit
+                }));
+                setAppointments(formattedAppointments);
+            } catch (err) {
+                console.error('❌ Error fetching appointments:', err);
+            }
+        };
+        fetchAppointments();
     }, []);
+
+    // Test Management State
+    const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+    const [isEditingTest, setIsEditingTest] = useState(false);
+    const [selectedTest, setSelectedTest] = useState<any>(null);
+    const [testForm, setTestForm] = useState({
+        id: 0,
+        department_id: '',
+        name: '',
+        description: '',
+        cost: 0,
+        duration_minutes: 30,
+        is_available: true
+    });
+
+    const handleAddTestClick = () => {
+        setIsEditingTest(false);
+        setTestForm({
+            id: 0,
+            department_id: departments.length > 0 ? departments[0].id : '',
+            name: '',
+            description: '',
+            cost: 0,
+            duration_minutes: 30,
+            is_available: true
+        });
+        setIsTestModalOpen(true);
+    };
+
+    const handleEditTestClick = (test: any) => {
+        setIsEditingTest(true);
+        // Find department ID for this test
+        const dept = departments.find(d => d.name === test.department_name);
+        setTestForm({
+            id: test.id,
+            department_id: dept ? dept.id : '', // We might need to fetch dept ID if not in view model
+            name: test.name,
+            description: test.description || '',
+            cost: test.cost,
+            duration_minutes: test.duration_minutes || 30,
+            is_available: test.is_available ?? true
+        });
+        setIsTestModalOpen(true);
+    };
+
+    const handleSaveTest = async () => {
+        if (!testForm.name || !testForm.cost || !testForm.department_id) {
+            alert("Please fill in required fields (Name, Department, Cost)");
+            return;
+        }
+
+        try {
+            if (isEditingTest) {
+                // Update existing test
+                await api.updateTest(testForm.id, {
+                    name: testForm.name,
+                    description: testForm.description,
+                    cost: parseInt(testForm.cost.toString()),
+                    duration_minutes: parseInt(testForm.duration_minutes.toString()),
+                    is_available: testForm.is_available
+                });
+                console.log('✅ Test updated successfully');
+            } else {
+                // Add new test
+                await api.addTest({
+                    department_id: parseInt(testForm.department_id.toString()),
+                    name: testForm.name,
+                    description: testForm.description,
+                    cost: parseInt(testForm.cost.toString()),
+                    duration_minutes: parseInt(testForm.duration_minutes.toString())
+                });
+                console.log('✅ Test added successfully');
+            }
+
+            // Refresh resources to get updated tests
+            const data = await api.getHospitalResources();
+            // @ts-ignore
+            setTests(data.tests || []);
+
+            setIsTestModalOpen(false);
+        } catch (err) {
+            console.error('❌ Error saving test:', err);
+            alert('Failed to save test. Please try again.');
+        }
+    };
+
+    const handleDeleteTest = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this test?')) return;
+
+        try {
+            await api.deleteTest(id);
+            // Refresh resources
+            const data = await api.getHospitalResources();
+            // @ts-ignore
+            setTests(data.tests || []);
+            console.log('✅ Test deleted successfully');
+        } catch (err) {
+            console.error('❌ Error deleting test:', err);
+            alert('Failed to delete test. Please try again.');
+        }
+    };
 
     // Resource Edit State
     const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
@@ -669,8 +822,8 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                     <MenuItem view="AMBULANCE" icon={<Ambulance size={18} />} label="Ambulance Service" />
                     <MenuItem view="DEPARTMENTS" icon={<Activity size={18} />} label="Departments" />
                     <MenuItem view="PROFILE" icon={<Building2 size={18} />} label="Hospital Profile" />
+                    <MenuItem view="FEEDBACK" icon={<Star size={18} />} label="Patient Feedback" />
                     <MenuItem view="FINANCIALS" icon={<CreditCard size={18} />} label="Financials" />
-                    <MenuItem view="FEEDBACK" icon={<Star size={18} />} label="Feedback" />
                     <MenuItem view="SETTINGS" icon={<Settings size={18} />} label="Settings" />
                 </nav>
                 <div className="p-4 border-t border-slate-100">
@@ -1452,6 +1605,71 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                         </div>
                                     )}
                                 </Card>
+
+                                {/* Diagnostic Tests Section */}
+                                <Card>
+                                    <div className="flex justify-between items-center mb-6">
+                                        <div>
+                                            <h4 className="font-bold text-lg text-slate-800 font-heading">Diagnostic Tests & Services</h4>
+                                            <p className="text-sm text-slate-500">Manage test prices and availability</p>
+                                        </div>
+                                        <Button onClick={handleAddTestClick} size="sm">
+                                            <Plus size={16} className="mr-2" /> Add New Test
+                                        </Button>
+                                    </div>
+
+                                    {tests.length === 0 ? (
+                                        <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                            <FileText size={48} className="mx-auto text-slate-300 mb-4" />
+                                            <p className="text-slate-500">No tests configured yet</p>
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full">
+                                                <thead className="bg-slate-50 border-b border-slate-200">
+                                                    <tr>
+                                                        <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase">Test Name</th>
+                                                        <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase">Department</th>
+                                                        <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase">Cost (৳)</th>
+                                                        <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase text-center">Status</th>
+                                                        <th className="text-right p-4 text-xs font-bold text-slate-600 uppercase">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {tests.map((test: any) => (
+                                                        <tr key={test.id} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="p-4">
+                                                                <div className="font-bold text-slate-900">{test.name}</div>
+                                                                {test.description && <div className="text-xs text-slate-500 truncate max-w-[200px]">{test.description}</div>}
+                                                            </td>
+                                                            <td className="p-4 text-slate-600 text-sm">
+                                                                {test.department_name || departments.find(d => d.id === test.department_id)?.name || 'N/A'}
+                                                            </td>
+                                                            <td className="p-4">
+                                                                <span className="font-bold text-slate-900">৳{test.cost}</span>
+                                                            </td>
+                                                            <td className="p-4 text-center">
+                                                                <Badge variant={test.is_available ? "success" : "default"}>
+                                                                    {test.is_available ? 'Available' : 'Unavailable'}
+                                                                </Badge>
+                                                            </td>
+                                                            <td className="p-4 text-right">
+                                                                <div className="flex justify-end gap-2">
+                                                                    <Button variant="outline" size="sm" onClick={() => handleEditTestClick(test)}>
+                                                                        <Edit3 size={14} className="mr-1" /> Edit
+                                                                    </Button>
+                                                                    <Button variant="danger" size="sm" onClick={() => handleDeleteTest(test.id)}>
+                                                                        <Trash2 size={14} />
+                                                                    </Button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </Card>
                             </div>
                         )
                     }
@@ -1621,9 +1839,318 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                         )
                     }
 
+                    {/* VIEW: TELEMEDICINE */}
+                    {activeView === 'TELEMEDICINE' && (
+                        <div className="space-y-6 animate-fade-in">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-slate-900">Telemedicine Dashboard</h2>
+                                    <p className="text-gray-600 mt-1">Overview of all video consultations in the hospital</p>
+                                </div>
+                            </div>
+
+                            {/* Telemedicine Stats */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <Card>
+                                    <p className="text-slate-500 font-medium mb-1">Total Sessions</p>
+                                    <h2 className="text-3xl font-bold text-slate-900">
+                                        {appointments.filter(a => a.consultationType === 'Telemedicine').length}
+                                    </h2>
+                                </Card>
+                                <Card>
+                                    <p className="text-purple-600 font-medium mb-1">Today's Sessions</p>
+                                    <h2 className="text-3xl font-bold text-purple-900">
+                                        {appointments.filter(a => a.consultationType === 'Telemedicine' && a.date === new Date().toISOString().split('T')[0]).length}
+                                    </h2>
+                                </Card>
+                                <Card>
+                                    <p className="text-green-600 font-medium mb-1">Completed</p>
+                                    <h2 className="text-3xl font-bold text-green-900">
+                                        {appointments.filter(a => a.consultationType === 'Telemedicine' && a.status === 'COMPLETED').length}
+                                    </h2>
+                                </Card>
+                                <Card>
+                                    <p className="text-blue-600 font-medium mb-1">Pending</p>
+                                    <h2 className="text-3xl font-bold text-blue-900">
+                                        {appointments.filter(a => a.consultationType === 'Telemedicine' && (a.status === 'PENDING' || a.status === 'CONFIRMED')).length}
+                                    </h2>
+                                </Card>
+                            </div>
+
+                            {/* Appointments List */}
+                            <Card>
+                                <h3 className="font-bold text-lg mb-4">All Telemedicine Appointments</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-slate-50 text-slate-500">
+                                            <tr>
+                                                <th className="p-3">Date & Time</th>
+                                                <th className="p-3">Doctor</th>
+                                                <th className="p-3">Patient</th>
+                                                <th className="p-3">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {appointments.filter(a => a.consultationType === 'Telemedicine').length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={4} className="p-8 text-center text-slate-500">
+                                                        No telemedicine appointments found.
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                appointments
+                                                    .filter(a => a.consultationType === 'Telemedicine')
+                                                    .sort((a, b) => new Date(`${b.date} ${b.time}`).getTime() - new Date(`${a.date} ${a.time}`).getTime())
+                                                    .map((apt) => (
+                                                        <tr key={apt.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                                            <td className="p-3">
+                                                                <div className="font-medium">{apt.date}</div>
+                                                                <div className="text-xs text-slate-500">{apt.time}</div>
+                                                            </td>
+                                                            <td className="p-3 font-medium">{apt.doctorName}</td>
+                                                            <td className="p-3">{apt.patientName}</td>
+                                                            <td className="p-3">
+                                                                <Badge color={apt.status === 'CONFIRMED' ? 'green' : apt.status === 'COMPLETED' ? 'blue' : 'yellow'}>
+                                                                    {apt.status}
+                                                                </Badge>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </Card>
+                        </div>
+                    )}
+
                     {/* ... (Other views fallback) ... */}
                 </div >
             </div >
+
+            {/* --- VIEW: FEEDBACK --- */}
+            {activeView === 'FEEDBACK' && (
+                <div className="space-y-6 animate-fade-in pb-10">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Patient Feedback</h2>
+                            <p className="text-gray-600 mt-1">View and manage patient reviews and ratings</p>
+                        </div>
+                    </div>
+
+                    {isLoadingReviews ? (
+                        <div className="text-center py-16">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+                            <p className="text-slate-500">Loading reviews...</p>
+                        </div>
+                    ) : reviews.length === 0 ? (
+                        <Card className="text-center py-16">
+                            <Star size={64} className="mx-auto text-slate-300 mb-4" />
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">No Reviews Yet</h3>
+                            <p className="text-slate-500">Patient reviews will appear here once submitted.</p>
+                        </Card>
+                    ) : (
+                        <>
+                            {/* Statistics Cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <Card className="bg-gradient-to-br from-amber-500 to-amber-600 text-white border-0 shadow-lg">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Average Rating</p>
+                                            <h3 className="text-3xl font-bold">
+                                                {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
+                                            </h3>
+                                        </div>
+                                        <Star className="text-white/40" size={40} />
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-1">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <Star
+                                                key={star}
+                                                size={14}
+                                                className={`${star <= Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length) ? 'text-white fill-white' : 'text-white/40'}`}
+                                            />
+                                        ))}
+                                    </div>
+                                </Card>
+
+                                <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Total Reviews</p>
+                                            <h3 className="text-3xl font-bold">{reviews.length}</h3>
+                                        </div>
+                                        <MessageCircle className="text-white/40" size={40} />
+                                    </div>
+                                    <p className="text-sm text-white/90 mt-2">All time feedback</p>
+                                </Card>
+
+                                <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-lg">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Verified Reviews</p>
+                                            <h3 className="text-3xl font-bold">
+                                                {reviews.filter(r => r.isVerified).length}
+                                            </h3>
+                                        </div>
+                                        <CheckCircle className="text-white/40" size={40} />
+                                    </div>
+                                    <p className="text-sm text-white/90 mt-2">
+                                        {((reviews.filter(r => r.isVerified).length / reviews.length) * 100).toFixed(0)}% verified
+                                    </p>
+                                </Card>
+
+                                <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">5-Star Reviews</p>
+                                            <h3 className="text-3xl font-bold">
+                                                {reviews.filter(r => r.rating === 5).length}
+                                            </h3>
+                                        </div>
+                                        <TrendingUp className="text-white/40" size={40} />
+                                    </div>
+                                    <p className="text-sm text-white/90 mt-2">
+                                        {((reviews.filter(r => r.rating === 5).length / reviews.length) * 100).toFixed(0)}% excellent
+                                    </p>
+                                </Card>
+                            </div>
+
+                            {/* Rating Distribution */}
+                            <Card className="shadow-lg">
+                                <h3 className="text-lg font-bold text-slate-900 mb-4">Rating Distribution</h3>
+                                <div className="space-y-3">
+                                    {[5, 4, 3, 2, 1].map((rating) => {
+                                        const count = reviews.filter(r => r.rating === rating).length;
+                                        const percentage = (count / reviews.length) * 100;
+                                        return (
+                                            <div key={rating} className="flex items-center gap-3">
+                                                <div className="flex items-center gap-1 w-16">
+                                                    <span className="text-sm font-semibold text-slate-700">{rating}</span>
+                                                    <Star size={14} className="text-amber-400 fill-amber-400" />
+                                                </div>
+                                                <div className="flex-1 h-4 bg-slate-200 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all"
+                                                        style={{ width: `${percentage}%` }}
+                                                    ></div>
+                                                </div>
+                                                <span className="text-sm font-medium text-slate-600 w-12 text-right">{count}</span>
+                                                <span className="text-xs text-slate-500 w-12 text-right">({percentage.toFixed(0)}%)</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </Card>
+
+                            {/* Filters */}
+                            <Card className="shadow-lg">
+                                <div className="flex flex-wrap gap-3 items-center">
+                                    <span className="text-sm font-semibold text-slate-700">Filter by:</span>
+                                    <button className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
+                                        All Reviews ({reviews.length})
+                                    </button>
+                                    <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+                                        5 Stars ({reviews.filter(r => r.rating === 5).length})
+                                    </button>
+                                    <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+                                        4 Stars ({reviews.filter(r => r.rating === 4).length})
+                                    </button>
+                                    <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+                                        ≤3 Stars ({reviews.filter(r => r.rating <= 3).length})
+                                    </button>
+                                    <button className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+                                        Verified ({reviews.filter(r => r.isVerified).length})
+                                    </button>
+                                </div>
+                            </Card>
+
+                            {/* Reviews List */}
+                            <div>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-bold text-slate-900">Recent Reviews</h3>
+                                    <span className="text-sm text-slate-500">{reviews.length} total reviews</span>
+                                </div>
+                                <div className="grid gap-4">
+                                    {reviews.map((review) => (
+                                        <Card key={review.id} className="shadow-md hover:shadow-lg transition-all">
+                                            <div className="flex gap-4">
+                                                {/* Avatar */}
+                                                <div className="flex-shrink-0">
+                                                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center text-primary-600 font-bold text-xl border-2 border-primary-300">
+                                                        {review.patientName?.[0] || 'P'}
+                                                    </div>
+                                                </div>
+
+                                                {/* Content */}
+                                                <div className="flex-1 min-w-0">
+                                                    {/* Header */}
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div>
+                                                            <h4 className="font-bold text-slate-900 text-lg">{review.patientName || 'Anonymous Patient'}</h4>
+                                                            <p className="text-sm text-slate-600">
+                                                                Reviewed <span className="font-semibold text-slate-800">{review.doctorName}</span>
+                                                                <span className="text-slate-400"> • </span>
+                                                                <span className="text-slate-500">{review.specialization}</span>
+                                                            </p>
+                                                        </div>
+                                                        <Button
+                                                            variant="ghost"
+                                                            className="text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                            onClick={async () => {
+                                                                if (confirm('Delete this review?')) {
+                                                                    try {
+                                                                        await api.deleteReview(review.id);
+                                                                        setReviews(prev => prev.filter(r => r.id !== review.id));
+                                                                    } catch (e) { console.error(e); alert('Failed to delete'); }
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </Button>
+                                                    </div>
+
+                                                    {/* Rating & Date */}
+                                                    <div className="flex flex-wrap items-center gap-3 mb-3">
+                                                        <div className="flex items-center gap-0.5">
+                                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                                <Star
+                                                                    key={star}
+                                                                    size={18}
+                                                                    className={`${star <= review.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                        <span className="text-sm text-slate-500">
+                                                            {new Date(review.createdAt).toLocaleDateString('en-US', {
+                                                                month: 'short',
+                                                                day: 'numeric',
+                                                                year: 'numeric'
+                                                            })}
+                                                        </span>
+                                                        {review.isVerified && (
+                                                            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs rounded-full font-semibold flex items-center gap-1">
+                                                                <CheckCircle size={12} /> Verified Visit
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Comment */}
+                                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                                        <p className="text-slate-700 leading-relaxed italic">
+                                                            "{review.comment}"
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </Card>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
 
             {/* MODALS (Kept same structure, inherits new styles) */}
             {/* RESOURCE UPDATE MODAL */}
@@ -2007,6 +2534,91 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                             <Save size={18} className="mr-2" />
                             {isEditingSlot ? 'Update' : 'Add'} Time Slot
                         </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* TEST MANAGEMENT MODAL */}
+            <Modal
+                isOpen={isTestModalOpen}
+                onClose={() => setIsTestModalOpen(false)}
+                title={isEditingTest ? "Edit Test" : "Add New Test"}
+            >
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Test Name</label>
+                        <input
+                            type="text"
+                            className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                            placeholder="e.g., Whole Body MRI"
+                            value={testForm.name}
+                            onChange={e => setTestForm({ ...testForm, name: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Department</label>
+                        <select
+                            className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                            value={testForm.department_id}
+                            onChange={e => setTestForm({ ...testForm, department_id: e.target.value })}
+                            disabled={departments.length === 0}
+                        >
+                            <option value="">Select Department</option>
+                            {departments.map((dept: any) => (
+                                <option key={dept.id} value={dept.id}>{dept.name}</option>
+                            ))}
+                        </select>
+                        {departments.length === 0 && <p className="text-xs text-red-500 mt-1">No departments found. Please add a department first.</p>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Cost (৳)</label>
+                            <input
+                                type="number"
+                                className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                placeholder="0"
+                                value={testForm.cost}
+                                onChange={e => setTestForm({ ...testForm, cost: parseInt(e.target.value) || 0 })}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Duration (min)</label>
+                            <input
+                                type="number"
+                                className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                placeholder="30"
+                                value={testForm.duration_minutes}
+                                onChange={e => setTestForm({ ...testForm, duration_minutes: parseInt(e.target.value) || 0 })}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                        <textarea
+                            className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                            rows={3}
+                            placeholder="Details about the test..."
+                            value={testForm.description}
+                            onChange={e => setTestForm({ ...testForm, description: e.target.value })}
+                        ></textarea>
+                    </div>
+
+                    {isEditingTest && (
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                id="is_available"
+                                checked={testForm.is_available}
+                                onChange={e => setTestForm({ ...testForm, is_available: e.target.checked })}
+                                className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <label htmlFor="is_available" className="text-sm font-medium text-gray-900">Available for booking</label>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end pt-4 gap-2">
+                        <Button variant="ghost" onClick={() => setIsTestModalOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSaveTest}>Save Test</Button>
                     </div>
                 </div>
             </Modal>
