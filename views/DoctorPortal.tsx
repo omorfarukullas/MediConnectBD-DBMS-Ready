@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-    Users, Clock, Calendar, Video, CheckCircle, XCircle, ArrowLeft,
+    Users, Clock, Calendar, Video, CheckCircle, XCircle,
     Home, List, Activity, FileText, CreditCard, Star, Bell, Settings,
     Play, Pause, Square, TrendingUp, LogOut, Menu, CalendarClock
 } from 'lucide-react';
@@ -175,18 +175,8 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                             <Menu size={24} />
                         </button>
                         <div>
-                            {/* Back Button for sub-views or Logout for Dashboard */}
+                            {/* Header Title */}
                             <div className="flex items-center gap-2">
-                                {activeView !== 'DASHBOARD' ? (
-                                    <Button variant="ghost" onClick={() => setActiveView('DASHBOARD')} className="text-slate-500 hover:text-slate-800 -ml-2 px-2">
-                                        <ArrowLeft size={20} />
-                                    </Button>
-                                ) : (
-                                    <Button variant="ghost" onClick={onBack} className="text-slate-500 hover:text-slate-800 -ml-2 px-2 md:hidden">
-                                        <ArrowLeft size={20} />
-                                    </Button>
-                                )}
-
                                 <div>
                                     <h2 className="text-xl md:text-2xl font-bold text-slate-900">
                                         {activeView === 'DASHBOARD' ? 'Dashboard Overview' :
@@ -335,7 +325,7 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
 
                     {/* VIEW: EARNINGS */}
                     {activeView === 'EARNINGS' && (
-                        <div className="space-y-6 animate-fade-in">
+                        <div className="space-y-4 sm:space-y-6 animate-fade-in pb-10">
                             {isLoadingEarnings ? (
                                 <div className="text-center py-12">
                                     <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
@@ -343,21 +333,21 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                                 </div>
                             ) : earnings ? (
                                 <>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
                                         <Card className="bg-slate-900 text-white">
-                                            <p className="text-slate-400 font-medium mb-1">Total Earnings</p>
-                                            <h2 className="text-4xl font-bold mb-2">৳ {(earnings?.totalEarnings || 0).toLocaleString()}</h2>
-                                            <p className="text-xs text-slate-400">From {(earnings?.telemedicine?.count || 0) + (earnings?.physical?.count || 0)} completed appointments</p>
+                                            <p className="text-slate-400 font-medium mb-1 text-xs sm:text-sm">Total Earnings</p>
+                                            <h2 className="text-3xl sm:text-4xl font-bold mb-2">৳ {(earnings?.totalEarnings || 0).toLocaleString()}</h2>
+                                            <p className="text-[10px] sm:text-xs text-slate-400">From {(earnings?.telemedicine?.count || 0) + (earnings?.physical?.count || 0)} completed appointments</p>
                                         </Card>
                                         <Card className="bg-purple-50 border-purple-100">
-                                            <p className="text-purple-600 font-medium mb-1">Telemedicine Earnings</p>
-                                            <h2 className="text-3xl font-bold text-purple-900">৳ {(earnings?.telemedicine?.earnings || 0).toLocaleString()}</h2>
-                                            <p className="text-xs text-purple-600 mt-2">{earnings?.telemedicine?.count || 0} online consultations</p>
+                                            <p className="text-purple-600 font-medium mb-1 text-xs sm:text-sm">Telemedicine Earnings</p>
+                                            <h2 className="text-2xl sm:text-3xl font-bold text-purple-900">৳ {(earnings?.telemedicine?.earnings || 0).toLocaleString()}</h2>
+                                            <p className="text-[10px] sm:text-xs text-purple-600 mt-2">{earnings?.telemedicine?.count || 0} online consultations</p>
                                         </Card>
                                         <Card className="bg-blue-50 border-blue-100">
-                                            <p className="text-blue-600 font-medium mb-1">Physical Earnings</p>
-                                            <h2 className="text-3xl font-bold text-blue-900">৳ {(earnings?.physical?.earnings || 0).toLocaleString()}</h2>
-                                            <p className="text-xs text-blue-600 mt-2">{earnings?.physical?.count || 0} physical visits</p>
+                                            <p className="text-blue-600 font-medium mb-1 text-xs sm:text-sm">Physical Earnings</p>
+                                            <h2 className="text-2xl sm:text-3xl font-bold text-blue-900">৳ {(earnings?.physical?.earnings || 0).toLocaleString()}</h2>
+                                            <p className="text-[10px] sm:text-xs text-blue-600 mt-2">{earnings?.physical?.count || 0} physical visits</p>
                                         </Card>
                                     </div>
 
@@ -433,29 +423,29 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
 
                     {/* VIEW: TELEMEDICINE */}
                     {activeView === 'TELEMEDICINE' && (
-                        <div className="space-y-6 animate-fade-in">
-                            <div className="flex items-center justify-between">
+                        <div className="space-y-4 sm:space-y-6 animate-fade-in pb-10">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                                 <div>
-                                    <h2 className="text-2xl font-bold text-slate-900">Telemedicine Appointments</h2>
-                                    <p className="text-gray-600 mt-1">Manage your video consultations (Past & Upcoming)</p>
+                                    <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Telemedicine Appointments</h2>
+                                    <p className="text-gray-600 mt-1 text-xs sm:text-sm">Manage your video consultations (Past & Upcoming)</p>
                                 </div>
-                                <div className="flex gap-2">
-                                    <Button variant="outline" className="flex items-center gap-2">
-                                        <CalendarClock size={18} /> Schedule New
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                    <Button variant="outline" className="flex items-center gap-2 text-sm sm:text-base min-h-[44px] flex-1 sm:flex-none justify-center">
+                                        <CalendarClock size={18} /> <span className="hidden sm:inline">Schedule New</span><span className="sm:hidden">Schedule</span>
                                     </Button>
                                 </div>
                             </div>
 
                             {/* Stats for Telemedicine */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                                 <Card className="bg-purple-50 border-purple-100">
                                     <div className="flex items-center gap-3">
-                                        <div className="p-3 bg-purple-100 text-purple-600 rounded-lg">
-                                            <Video size={24} />
+                                        <div className="p-2 sm:p-3 bg-purple-100 text-purple-600 rounded-lg">
+                                            <Video size={20} />
                                         </div>
                                         <div>
-                                            <p className="text-sm text-purple-600 font-medium">Total Sessions</p>
-                                            <h3 className="text-2xl font-bold text-purple-900">
+                                            <p className="text-xs sm:text-sm text-purple-600 font-medium">Total Sessions</p>
+                                            <h3 className="text-xl sm:text-2xl font-bold text-purple-900">
                                                 {appointments.filter(a => ['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((a.consultationType || a.type || '').toUpperCase())).length}
                                             </h3>
                                         </div>
@@ -463,12 +453,12 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                                 </Card>
                                 <Card className="bg-blue-50 border-blue-100">
                                     <div className="flex items-center gap-3">
-                                        <div className="p-3 bg-blue-100 text-blue-600 rounded-lg">
-                                            <Clock size={24} />
+                                        <div className="p-2 sm:p-3 bg-blue-100 text-blue-600 rounded-lg">
+                                            <Clock size={20} />
                                         </div>
                                         <div>
-                                            <p className="text-sm text-blue-600 font-medium">Upcoming</p>
-                                            <h3 className="text-2xl font-bold text-blue-900">
+                                            <p className="text-xs sm:text-sm text-blue-600 font-medium">Upcoming</p>
+                                            <h3 className="text-xl sm:text-2xl font-bold text-blue-900">
                                                 {appointments.filter(a => ['TELEMEDICINE', 'ONLINE', 'VIDEO'].includes((a.consultationType || a.type || '').toUpperCase()) && a.status !== 'COMPLETED').length}
                                             </h3>
                                         </div>

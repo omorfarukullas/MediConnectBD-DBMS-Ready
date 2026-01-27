@@ -109,14 +109,14 @@ export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
                 {/* Date Header */}
                 <button
                   onClick={() => toggleDate(date)}
-                  className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${isToday ? 'bg-primary-100' : 'bg-gray-100'}`}>
-                      <Calendar className={isToday ? 'text-primary-600' : 'text-gray-600'} size={20} />
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className={`p-1.5 sm:p-2 rounded-lg ${isToday ? 'bg-primary-100' : 'bg-gray-100'}`}>
+                      <Calendar className={isToday ? 'text-primary-600' : 'text-gray-600'} size={18} />
                     </div>
                     <div className="text-left">
-                      <h3 className="font-semibold text-slate-900">
+                      <h3 className="font-semibold text-slate-900 text-sm sm:text-base">
                         {dateObj.toLocaleDateString('en-US', {
                           weekday: 'long',
                           year: 'numeric',
@@ -124,7 +124,7 @@ export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
                           day: 'numeric'
                         })}
                       </h3>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-xs sm:text-sm text-gray-600">
                         {dateAppointments.length} {dateAppointments.length === 1 ? 'appointment' : 'appointments'}
                       </p>
                     </div>
@@ -132,7 +132,7 @@ export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
                       <Badge variant="primary" size="sm">Today</Badge>
                     )}
                   </div>
-                  {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                 </button>
 
                 {/* Appointment List */}
@@ -149,31 +149,31 @@ export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
                           <button
                             key={appointment.id}
                             onClick={() => handlePatientClick(appointment)}
-                            className={`w-full p-4 hover:bg-gray-50 transition-colors text-left ${isActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'
+                            className={`w-full p-3 sm:p-4 hover:bg-gray-50 transition-colors text-left ${isActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'
                               }`}
                           >
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="flex items-center gap-3 flex-1">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 sm:gap-3 flex-1 w-full">
                                 {/* Queue Number */}
                                 {appointment.queueNumber && (
-                                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
-                                    <span className="font-bold text-primary-600">
+                                  <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                                    <span className="font-bold text-primary-600 text-sm sm:text-base">
                                       {appointment.queueNumber}
                                     </span>
                                   </div>
                                 )}
 
                                 {/* Patient Info */}
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="font-semibold text-slate-900">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-semibold text-slate-900 text-sm sm:text-base">
                                       {appointment.patientName || 'Unknown Patient'}
                                     </h4>
                                     {isActive && (
                                       <Badge variant="success" size="sm">Active Now</Badge>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                                  <div className="flex items-center gap-3 sm:gap-4 mt-1 text-xs sm:text-sm text-gray-600 flex-wrap">
                                     <span className="flex items-center gap-1">
                                       <Clock size={14} />
                                       {formatTime(appointment.time)}
@@ -187,22 +187,22 @@ export const DoctorAppointmentList: React.FC<DoctorAppointmentListProps> = ({
                                 </div>
                               </div>
 
-                              {/* Status Badge */}
-                              <div className="flex flex-col items-end gap-2">
+                              {/* Status Badge and Action Button */}
+                              <div className="flex flex-col sm:flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
                                 <Badge variant={getStatusColor(appointment.status as string)}>
                                   {appointment.status}
                                 </Badge>
 
-                                {appointmentType === 'Telemedicine' && appointment.status === 'CONFIRMED' && (
+                                {(appointmentType === 'Telemedicine' && (appointment.status === 'CONFIRMED' || appointment.status === 'ACCEPTED')) && (
                                   <Button
                                     size="sm"
-                                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs py-1 h-auto"
+                                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm py-2 h-auto min-h-[40px] w-full sm:w-auto flex items-center justify-center gap-1.5"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (onStartCall) onStartCall(appointment);
                                     }}
                                   >
-                                    <Video size={14} className="mr-1" /> Start Call
+                                    <Video size={16} /> Start Call
                                   </Button>
                                 )}
                               </div>

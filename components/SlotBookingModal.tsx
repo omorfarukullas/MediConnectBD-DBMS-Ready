@@ -155,13 +155,13 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-[95vw] sm:max-w-xl md:max-w-2xl w-full max-h-[95vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 flex justify-between items-center">
-                    <div>
-                        <h3 className="text-xl font-bold">Book Appointment</h3>
-                        <p className="text-sm text-blue-100 mt-1">{doctorName} • {doctorSpecialization}</p>
+                <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center">
+                    <div className="flex-1 min-w-0 pr-2">
+                        <h3 className="text-lg sm:text-xl font-bold truncate">Book Appointment</h3>
+                        <p className="text-xs sm:text-sm text-blue-100 mt-1 truncate">{doctorName} • {doctorSpecialization}</p>
                     </div>
                     <button
                         onClick={handleClose}
@@ -172,33 +172,33 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                 </div>
 
                 {/* Progress Indicator */}
-                <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-                    <div className="flex items-center justify-center gap-2">
-                        <div className={`flex items-center gap-2 ${step === 'type' ? 'text-blue-600 font-semibold' : step !== 'type' ? 'text-green-600' : 'text-gray-400'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'type' ? 'bg-blue-600 text-white' : step !== 'type' ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
-                                {step !== 'type' ? <CheckCircle size={16} /> : '1'}
+                <div className="bg-gray-50 px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-200">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2">
+                        <div className={`flex items-center gap-1 sm:gap-2 ${step === 'type' ? 'text-blue-600 font-semibold' : step !== 'type' ? 'text-green-600' : 'text-gray-400'}`}>
+                            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm ${step === 'type' ? 'bg-blue-600 text-white' : step !== 'type' ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
+                                {step !== 'type' ? <CheckCircle size={14} className="sm:w-4 sm:h-4" /> : '1'}
                             </div>
-                            <span className="text-sm">Type</span>
+                            <span className="text-xs sm:text-sm hidden sm:inline">Type</span>
                         </div>
-                        <div className="w-12 h-0.5 bg-gray-300"></div>
-                        <div className={`flex items-center gap-2 ${step === 'session' ? 'text-blue-600 font-semibold' : step === 'details' || step === 'success' ? 'text-green-600' : 'text-gray-400'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'session' ? 'bg-blue-600 text-white' : step === 'details' || step === 'success' ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
-                                {step === 'details' || step === 'success' ? <CheckCircle size={16} /> : '2'}
+                        <div className="w-6 sm:w-12 h-0.5 bg-gray-300"></div>
+                        <div className={`flex items-center gap-1 sm:gap-2 ${step === 'session' ? 'text-blue-600 font-semibold' : step === 'details' || step === 'success' ? 'text-green-600' : 'text-gray-400'}`}>
+                            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm ${step === 'session' ? 'bg-blue-600 text-white' : step === 'details' || step === 'success' ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
+                                {step === 'details' || step === 'success' ? <CheckCircle size={14} className="sm:w-4 sm:h-4" /> : '2'}
                             </div>
-                            <span className="text-sm">Date & Time</span>
+                            <span className="text-xs sm:text-sm hidden sm:inline">Date & Time</span>
                         </div>
-                        <div className="w-12 h-0.5 bg-gray-300"></div>
-                        <div className={`flex items-center gap-2 ${step === 'details' ? 'text-blue-600 font-semibold' : step === 'success' ? 'text-green-600' : 'text-gray-400'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'details' ? 'bg-blue-600 text-white' : step === 'success' ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
-                                {step === 'success' ? <CheckCircle size={16} /> : '3'}
+                        <div className="w-6 sm:w-12 h-0.5 bg-gray-300"></div>
+                        <div className={`flex items-center gap-1 sm:gap-2 ${step === 'details' ? 'text-blue-600 font-semibold' : step === 'success' ? 'text-green-600' : 'text-gray-400'}`}>
+                            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm ${step === 'details' ? 'bg-blue-600 text-white' : step === 'success' ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
+                                {step === 'success' ? <CheckCircle size={14} className="sm:w-4 sm:h-4" /> : '3'}
                             </div>
-                            <span className="text-sm">Confirm</span>
+                            <span className="text-xs sm:text-sm hidden sm:inline">Confirm</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                     {/* Step 1: Appointment Type Selection */}
                     {step === 'type' && (
                         <div className="space-y-4">
@@ -250,7 +250,7 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
 
                             <Button
                                 onClick={() => setStep('session')}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2 py-3"
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2 py-3 min-h-[48px]"
                             >
                                 Continue to Select Date
                                 <ArrowRight size={18} />
@@ -291,8 +291,8 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                                 <div className="space-y-4 max-h-96 overflow-y-auto">
                                     {getSortedDates().map(date => (
                                         <div key={date} className="border border-gray-200 rounded-lg overflow-hidden">
-                                            <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                                                <h5 className="font-semibold text-gray-800 flex items-center gap-2">
+                                            <div className="bg-gray-50 px-3 sm:px-4 py-2 border-b border-gray-200">
+                                                <h5 className="font-semibold text-sm sm:text-base text-gray-800 flex items-center gap-2">
                                                     <Calendar size={16} className="text-blue-600" />
                                                     {getDateLabel(date)}
                                                 </h5>
@@ -302,7 +302,7 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                                                     <div
                                                         key={session.id}
                                                         onClick={() => session.available_spots > 0 && setSelectedSession(session)}
-                                                        className={`p-4 rounded-lg border-2 cursor-pointer transition ${selectedSession?.id === session.id
+                                                        className={`p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition min-h-[60px] ${selectedSession?.id === session.id
                                                             ? 'border-blue-500 bg-blue-50'
                                                             : session.available_spots > 0
                                                                 ? 'border-gray-200 hover:border-blue-300 bg-white'
@@ -339,18 +339,18 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                                 </div>
                             )}
 
-                            <div className="flex gap-3 pt-4 border-t border-gray-200">
+                            <div className="flex gap-2 sm:gap-3 pt-4 border-t border-gray-200">
                                 <Button
                                     onClick={() => setStep('type')}
                                     variant="outline"
-                                    className="flex-1"
+                                    className="flex-1 min-h-[48px]"
                                 >
                                     Back
                                 </Button>
                                 <Button
                                     onClick={() => setStep('details')}
                                     disabled={!selectedSession}
-                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 disabled:cursor-not-allowed min-h-[48px]"
                                 >
                                     Continue to Details
                                     <ArrowRight size={18} className="ml-2" />
@@ -365,9 +365,9 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                             <h4 className="text-lg font-semibold text-gray-800 mb-4">Appointment Details</h4>
 
                             {/* Summary Card */}
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                <h5 className="font-semibold text-gray-800 mb-3">Booking Summary</h5>
-                                <div className="space-y-2 text-sm">
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 mb-4">
+                                <h5 className="font-semibold text-blue-800 mb-2 sm:mb-3 text-sm sm:text-base">Selected Session</h5>
+                                <div className="space-y-2 text-xs sm:text-sm">
                                     <div className="flex justify-between">
                                         <span className="text-gray-600">Date:</span>
                                         <span className="font-semibold">{formatFullDate(selectedSession.slot_date)}</span>
@@ -398,7 +398,7 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                                     value={symptoms}
                                     onChange={(e) => setSymptoms(e.target.value)}
                                     placeholder="Please describe your symptoms or reason for consultation..."
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                    className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm sm:text-base min-h-[96px]"
                                     rows={4}
                                     required
                                 />
@@ -410,11 +410,11 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                                 </div>
                             )}
 
-                            <div className="flex gap-3 pt-4 border-t border-gray-200">
+                            <div className="flex gap-2 sm:gap-3 pt-4 border-t border-gray-200">
                                 <Button
                                     onClick={() => setStep('session')}
                                     variant="outline"
-                                    className="flex-1"
+                                    className="flex-1 min-h-[48px]"
                                     disabled={loading}
                                 >
                                     Back
@@ -422,7 +422,7 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                                 <Button
                                     onClick={handleBookAppointment}
                                     disabled={loading || !symptoms.trim()}
-                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 disabled:cursor-not-allowed min-h-[48px]"
                                 >
                                     {loading ? 'Booking...' : 'Confirm Booking'}
                                 </Button>
@@ -439,7 +439,7 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                             <h4 className="text-2xl font-bold text-gray-800 mb-2">Appointment Confirmed!</h4>
                             <p className="text-gray-600 mb-6">Your appointment has been successfully booked</p>
 
-                            <div className="bg-gray-50 rounded-lg p-6 mb-6 text-left max-w-md mx-auto">
+                            <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-4 sm:mb-6 text-left max-w-md mx-auto">
                                 <h5 className="font-semibold text-gray-800 mb-4">Appointment Details</h5>
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-3">
@@ -470,7 +470,7 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
 
                             <Button
                                 onClick={handleClose}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-8"
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-6 sm:px-8 min-h-[48px]"
                             >
                                 Done
                             </Button>

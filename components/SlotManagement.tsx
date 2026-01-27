@@ -162,31 +162,31 @@ const SlotManagement: React.FC = () => {
     }
 
     return (
-        <div className="p-6">
+        <div className="p-3 sm:p-6 pb-10">
             {/* Header */}
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
                 <div>
-                    <h2 className="text-3xl font-bold text-gray-800">Weekly Availability Schedule</h2>
-                    <p className="text-gray-600 mt-1">Manage your recurring weekly availability rules</p>
+                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800">Weekly Availability Schedule</h2>
+                    <p className="text-gray-600 mt-1 text-xs sm:text-sm">Manage your recurring weekly availability rules</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
                     <Button
                         onClick={() => {
                             setFormData({ ...formData, appointmentType: 'physical' });
                             setShowAddModal(true);
                         }}
-                        className="bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-lg flex items-center gap-2"
+                        className="bg-green-600 hover:bg-green-700 text-white px-4 sm:px-5 py-2 sm:py-3 rounded-lg flex items-center justify-center gap-2 text-sm sm:text-base min-h-[44px]"
                     >
-                        <User size={20} /> <Plus size={18} /> Add Physical Slot
+                        <User size={18} /> <Plus size={16} /> <span className="hidden sm:inline">Add Physical Slot</span><span className="sm:hidden">Physical</span>
                     </Button>
                     <Button
                         onClick={() => {
                             setFormData({ ...formData, appointmentType: 'telemedicine' });
                             setShowAddModal(true);
                         }}
-                        className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-lg flex items-center gap-2"
+                        className="bg-purple-600 hover:bg-purple-700 text-white px-4 sm:px-5 py-2 sm:py-3 rounded-lg flex items-center justify-center gap-2 text-sm sm:text-base min-h-[44px]"
                     >
-                        <Video size={20} /> <Plus size={18} /> Add Telemed Slot
+                        <Video size={18} /> <Plus size={16} /> <span className="hidden sm:inline">Add Telemed Slot</span><span className="sm:hidden">Telemed</span>
                     </Button>
                 </div>
             </div>
@@ -194,73 +194,73 @@ const SlotManagement: React.FC = () => {
             {/* Message Display */}
             {message.text && (
                 <div className={`mb-4 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
-                        'bg-red-50 text-red-800 border border-red-200'
+                    'bg-red-50 text-red-800 border border-red-200'
                     }`}>
                     {message.text}
                 </div>
             )}
 
             {/* Slots List Grouped by Day */}
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
                 {Object.keys(groupedSlots).length === 0 ? (
-                    <div className="text-center py-12 bg-gray-50 rounded-lg">
-                        <Calendar size={48} className="mx-auto text-gray-400 mb-3" />
-                        <h3 className="text-xl font-semibold text-gray-700 mb-2">No weekly schedule set</h3>
-                        <p className="text-gray-500">Create recurring availability rules to start accepting appointments</p>
+                    <div className="text-center py-8 sm:py-12 bg-gray-50 rounded-lg">
+                        <Calendar size={40} className="mx-auto text-gray-400 mb-3" />
+                        <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">No weekly schedule set</h3>
+                        <p className="text-gray-500 text-sm">Create recurring availability rules to start accepting appointments</p>
                     </div>
                 ) : (
                     dayOrder.filter(day => groupedSlots[day]).map(day => (
-                        <div key={day} className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                                <Calendar size={20} className="text-blue-600" />
+                        <div key={day} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-5">
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center gap-2">
+                                <Calendar size={18} className="text-blue-600" />
                                 <span className="capitalize">Every {day.toLowerCase()}</span>
-                                <span className="text-sm font-normal text-gray-500 ml-2">(Recurring Weekly)</span>
+                                <span className="text-xs sm:text-sm font-normal text-gray-500 ml-2">(Recurring Weekly)</span>
                             </h3>
-                            <div className="space-y-3">
+                            <div className="space-y-2 sm:space-y-3">
                                 {groupedSlots[day].map(slot => (
                                     <div
                                         key={slot.id}
-                                        className={`flex items-center justify-between p-4 rounded-lg border-2 ${slot.is_active
-                                                ? 'border-blue-200 bg-blue-50'
-                                                : 'border-gray-200 bg-gray-50 opacity-60'
+                                        className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 rounded-lg border-2 gap-3 ${slot.is_active
+                                            ? 'border-blue-200 bg-blue-50'
+                                            : 'border-gray-200 bg-gray-50 opacity-60'
                                             }`}
                                     >
-                                        <div className="flex items-center gap-4 flex-1">
-                                            <div className={`p-3 rounded-full ${slot.consultation_type === 'TELEMEDICINE'
-                                                    ? 'bg-purple-100 text-purple-600'
-                                                    : slot.consultation_type === 'BOTH'
-                                                        ? 'bg-indigo-100 text-indigo-600'
-                                                        : 'bg-green-100 text-green-600'
+                                        <div className="flex items-center gap-3 sm:gap-4 flex-1 w-full">
+                                            <div className={`p-2 sm:p-3 rounded-full flex-shrink-0 ${slot.consultation_type === 'TELEMEDICINE'
+                                                ? 'bg-purple-100 text-purple-600'
+                                                : slot.consultation_type === 'BOTH'
+                                                    ? 'bg-indigo-100 text-indigo-600'
+                                                    : 'bg-green-100 text-green-600'
                                                 }`}>
-                                                {slot.consultation_type === 'TELEMEDICINE' ? <Video size={20} /> : <User size={20} />}
+                                                {slot.consultation_type === 'TELEMEDICINE' ? <Video size={18} /> : <User size={18} />}
                                             </div>
 
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-lg font-semibold text-gray-800">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-base sm:text-lg font-semibold text-gray-800">
                                                         {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                                     </span>
-                                                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-white border border-gray-200 text-gray-600">
-                                                        Max {slot.max_patients} Patients
+                                                    <span className="px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-medium bg-white border border-gray-200 text-gray-600">
+                                                        Max {slot.max_patients}
                                                     </span>
                                                     {!slot.is_active && (
-                                                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
+                                                        <span className="px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-medium bg-gray-200 text-gray-700">
                                                             Inactive
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="text-sm text-gray-500 mt-1 capitalize">
+                                                <div className="text-xs sm:text-sm text-gray-500 mt-1 capitalize">
                                                     {slot.consultation_type.toLowerCase()} appointments
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 self-end sm:self-auto">
                                             <button
                                                 onClick={() => handleToggleSlot(slot.id, slot.is_active)}
-                                                className={`p-2 rounded-lg ${slot.is_active
-                                                        ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200'
-                                                        : 'bg-green-100 text-green-600 hover:bg-green-200'
+                                                className={`p-2 rounded-lg min-h-[40px] min-w-[40px] flex items-center justify-center ${slot.is_active
+                                                    ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200'
+                                                    : 'bg-green-100 text-green-600 hover:bg-green-200'
                                                     }`}
                                                 title={slot.is_active ? 'Deactivate' : 'Activate'}
                                             >
@@ -268,7 +268,7 @@ const SlotManagement: React.FC = () => {
                                             </button>
                                             <button
                                                 onClick={() => handleDeleteSlot(slot.id)}
-                                                className="p-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
+                                                className="p-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 min-h-[40px] min-w-[40px] flex items-center justify-center"
                                                 title="Delete Weekly Rule"
                                             >
                                                 <Trash2 size={18} />
@@ -299,8 +299,8 @@ const SlotManagement: React.FC = () => {
                         <form onSubmit={handleCreateSlot} className="p-6 space-y-4">
                             {/* Appointment Type Display */}
                             <div className={`p-4 rounded-lg border-2 ${formData.appointmentType === 'telemedicine'
-                                    ? 'border-purple-300 bg-purple-50'
-                                    : 'border-green-300 bg-green-50'
+                                ? 'border-purple-300 bg-purple-50'
+                                : 'border-green-300 bg-green-50'
                                 }`}>
                                 <div className="flex items-center gap-3">
                                     {formData.appointmentType === 'telemedicine' ? (

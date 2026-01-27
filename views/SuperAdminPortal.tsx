@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, FileText, Search, Plus, Edit2, Trash2, X, Eye, EyeOff, BarChart3, TrendingUp, Shield, LogOut, ArrowLeft, DollarSign } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Search, Plus, Edit2, Trash2, X, Eye, EyeOff, BarChart3, TrendingUp, Shield, LogOut, ArrowLeft, DollarSign, Menu } from 'lucide-react';
 import { Card, Button, Badge } from '../components/UIComponents';
 import { api } from '../services/apiClient';
 
@@ -18,6 +18,7 @@ interface User {
 
 export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
    const [activeView, setActiveView] = useState<View>('DASHBOARD');
+   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
    const [stats, setStats] = useState<any>(null);
    const [users, setUsers] = useState<User[]>([]);
    const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -194,7 +195,7 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
    // Sidebar Menu Item Component matching AdminPortal
    const MenuItem = ({ view, icon, label }: { view: View, icon: React.ReactNode, label: string }) => (
       <button
-         onClick={() => setActiveView(view)}
+         onClick={() => { setActiveView(view); setIsSidebarOpen(false); }}
          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${activeView === view
             ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20'
             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
@@ -207,7 +208,7 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
    return (
       <div className="flex min-h-screen bg-slate-50 font-sans">
          {/* SIDEBAR - Matching AdminPortal Design */}
-         <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col transition-transform duration-300 lg:relative lg:translate-x-0">
+         <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
             {/* Sidebar Header */}
             <div className="p-6 border-b border-slate-100">
                <div className="flex items-center gap-3">
@@ -239,21 +240,35 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
             </div>
          </aside>
 
+         {/* Mobile Sidebar Overlay */}
+         {isSidebarOpen && (
+            <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)}></div>
+         )}
+
          {/* MAIN CONTENT AREA */}
          <main className="flex-1 overflow-auto">
-            <div className="p-8">
+            {/* Mobile Header */}
+            <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center lg:hidden sticky top-0 z-30">
+               <button className="text-slate-600" onClick={() => setIsSidebarOpen(true)}>
+                  <Menu size={24} />
+               </button>
+               <h2 className="text-lg font-bold text-slate-900 font-heading">Super Admin</h2>
+               <div className="w-6"></div> {/* Spacer for centering */}
+            </div>
+
+            <div className="p-4 sm:p-8">
                {/* Dashboard View */}
                {activeView === 'DASHBOARD' && (
-                  <div className="space-y-6 animate-fade-in">
+                  <div className="space-y-4 sm:space-y-6 animate-fade-in pb-10">
                      <div>
-                        <h1 className="text-3xl font-bold text-slate-900 mb-2">Dashboard</h1>
-                        <p className="text-slate-500">System overview and statistics</p>
+                        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Dashboard</h1>
+                        <p className="text-slate-500 text-sm sm:text-base">System overview and statistics</p>
                      </div>
 
                      {stats && (
                         <>
                            {/* User Stats Grid */}
-                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                           <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                               {stats.users?.map((userStat: any, index: number) => {
                                  const colors = [
                                     'from-blue-500 to-blue-600',
@@ -263,9 +278,9 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
                                  ];
                                  return (
                                     <Card key={userStat.role} className={`bg-gradient-to-br ${colors[index % 4]} text-white border-0 shadow-lg`}>
-                                       <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">{userStat.role}</p>
-                                       <h2 className="text-4xl font-bold mb-2">{userStat.count}</h2>
-                                       <div className="flex items-center gap-1 text-sm text-white/90">
+                                       <p className="text-white/80 text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1">{userStat.role}</p>
+                                       <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2">{userStat.count}</h2>
+                                       <div className="flex items-center gap-1 text-xs sm:text-sm text-white/90">
                                           <TrendingUp size={14} />
                                           <span>{userStat.active_count} active</span>
                                        </div>
@@ -275,30 +290,30 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
                            </div>
 
                            {/* System Stats */}
-                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
                               <Card className="hover:shadow-md transition-shadow bg-white">
-                                 <p className="text-slate-500 text-sm font-medium mb-1">Total Appointments</p>
-                                 <h2 className="text-3xl font-bold text-slate-900">{stats.database?.total_appointments?.toLocaleString()}</h2>
+                                 <p className="text-slate-500 text-xs sm:text-sm font-medium mb-1">Total Appointments</p>
+                                 <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">{stats.database?.total_appointments?.toLocaleString()}</h2>
                               </Card>
                               <Card className="hover:shadow-md transition-shadow bg-white">
-                                 <p className="text-slate-500 text-sm font-medium mb-1">Recent Logins (24h)</p>
-                                 <h2 className="text-3xl font-bold text-emerald-600">{stats.recentLogins}</h2>
+                                 <p className="text-slate-500 text-xs sm:text-sm font-medium mb-1">Recent Logins (24h)</p>
+                                 <h2 className="text-2xl sm:text-3xl font-bold text-emerald-600">{stats.recentLogins}</h2>
                               </Card>
                               <Card className="hover:shadow-md transition-shadow bg-white">
-                                 <p className="text-slate-500 text-sm font-medium mb-1">Audit Log Entries</p>
-                                 <h2 className="text-3xl font-bold text-slate-900">{stats.database?.total_audit_logs?.toLocaleString()}</h2>
+                                 <p className="text-slate-500 text-xs sm:text-sm font-medium mb-1">Audit Log Entries</p>
+                                 <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">{stats.database?.total_audit_logs?.toLocaleString()}</h2>
                               </Card>
                            </div>
 
                            {/* Today's Activity */}
                            {stats.todayActivity && stats.todayActivity.length > 0 && (
                               <Card className="hover:shadow-md transition-shadow bg-white">
-                                 <h3 className="text-lg font-bold text-slate-900 mb-4">Today's Activity</h3>
-                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                 <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4">Today's Activity</h3>
+                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
                                     {stats.todayActivity.map((activity: any) => (
-                                       <div key={activity.action_type} className="text-center p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
-                                          <p className="text-2xl font-bold text-slate-900 mb-1">{activity.count}</p>
-                                          <p className="text-xs text-slate-600 font-medium uppercase tracking-wide">{activity.action_type}</p>
+                                       <div key={activity.action_type} className="text-center p-3 sm:p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
+                                          <p className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">{activity.count}</p>
+                                          <p className="text-[10px] sm:text-xs text-slate-600 font-medium uppercase tracking-wide">{activity.action_type}</p>
                                        </div>
                                     ))}
                                  </div>
@@ -311,19 +326,19 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
 
                {/* Users View */}
                {activeView === 'USERS' && (
-                  <div className="space-y-6 animate-fade-in">
-                     <div className="flex justify-between items-center">
+                  <div className="space-y-4 sm:space-y-6 animate-fade-in pb-10">
+                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <div>
-                           <h1 className="text-3xl font-bold text-slate-900 mb-2">User Management</h1>
-                           <p className="text-slate-500">Create, edit, and manage system users</p>
+                           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">User Management</h1>
+                           <p className="text-slate-500 text-sm sm:text-base">Create, edit, and manage system users</p>
                         </div>
-                        <Button onClick={openCreateModal} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg">
+                        <Button onClick={openCreateModal} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2">
                            <Plus size={18} /> Add New User
                         </Button>
                      </div>
 
                      <Card className="shadow-lg bg-white">
-                        <div className="flex gap-3 mb-6">
+                        <div className="flex flex-col sm:flex-row gap-3 mb-4 sm:mb-6">
                            <div className="relative flex-1">
                               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
                               <input
@@ -331,13 +346,13 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
                                  placeholder="Search by email or name..."
                                  value={searchTerm}
                                  onChange={(e) => setSearchTerm(e.target.value)}
-                                 className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                 className="w-full pl-10 pr-4 py-2 sm:py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
                               />
                            </div>
                            <select
                               value={roleFilter}
                               onChange={(e) => setRoleFilter(e.target.value)}
-                              className="px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              className="px-4 py-2 sm:py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
                            >
                               <option value="">All Roles</option>
                               <option value="PATIENT">Patient</option>
@@ -358,45 +373,45 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
                               <p className="text-slate-500 text-lg">No users found</p>
                            </div>
                         ) : (
-                           <div className="overflow-x-auto">
+                           <div className="overflow-x-auto -mx-4 sm:mx-0">
                               <table className="w-full">
                                  <thead className="bg-slate-50 border-b-2 border-slate-200">
                                     <tr>
-                                       <th className="p-4 text-left text-sm font-semibold text-slate-700">Name</th>
-                                       <th className="p-4 text-left text-sm font-semibold text-slate-700">Email</th>
-                                       <th className="p-4 text-left text-sm font-semibold text-slate-700">Role</th>
-                                       <th className="p-4 text-left text-sm font-semibold text-slate-700">Phone</th>
-                                       <th className="p-4 text-left text-sm font-semibold text-slate-700">Status</th>
-                                       <th className="p-4 text-left text-sm font-semibold text-slate-700">Actions</th>
+                                       <th className="p-3 sm:p-4 text-left text-xs sm:text-sm font-semibold text-slate-700">Name</th>
+                                       <th className="p-3 sm:p-4 text-left text-xs sm:text-sm font-semibold text-slate-700">Email</th>
+                                       <th className="p-3 sm:p-4 text-left text-xs sm:text-sm font-semibold text-slate-700">Role</th>
+                                       <th className="p-3 sm:p-4 text-left text-xs sm:text-sm font-semibold text-slate-700 hidden sm:table-cell">Phone</th>
+                                       <th className="p-3 sm:p-4 text-left text-xs sm:text-sm font-semibold text-slate-700 hidden md:table-cell">Status</th>
+                                       <th className="p-3 sm:p-4 text-left text-xs sm:text-sm font-semibold text-slate-700">Actions</th>
                                     </tr>
                                  </thead>
                                  <tbody>
                                     {users.map((user) => (
                                        <tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                                          <td className="p-4 font-medium text-slate-900">{user.name || user.email}</td>
-                                          <td className="p-4 text-slate-600">{user.email}</td>
-                                          <td className="p-4">
+                                          <td className="p-3 sm:p-4 font-medium text-slate-900 text-sm">{user.name || user.email}</td>
+                                          <td className="p-3 sm:p-4 text-slate-600 text-sm">{user.email}</td>
+                                          <td className="p-3 sm:p-4">
                                              <Badge color={user.role === 'SUPER_ADMIN' ? 'purple' : 'blue'}>
                                                 {user.role}
                                              </Badge>
                                           </td>
-                                          <td className="p-4 text-slate-600">{user.phone || '-'}</td>
-                                          <td className="p-4">
+                                          <td className="p-3 sm:p-4 text-slate-600 text-sm hidden sm:table-cell">{user.phone || '-'}</td>
+                                          <td className="p-3 sm:p-4 hidden md:table-cell">
                                              <Badge color={user.is_active ? 'green' : 'red'}>
                                                 {user.is_active ? 'Active' : 'Inactive'}
                                              </Badge>
                                           </td>
-                                          <td className="p-4">
+                                          <td className="p-3 sm:p-4">
                                              <div className="flex gap-2">
                                                 <button
                                                    onClick={() => openEditModal(user)}
-                                                   className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                   className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
                                                 >
                                                    <Edit2 size={16} />
                                                 </button>
                                                 <button
                                                    onClick={() => handleDeleteUser(user.id)}
-                                                   className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                   className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
                                                 >
                                                    <Trash2 size={16} />
                                                 </button>
@@ -414,41 +429,41 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
 
                {/* Audit Logs & Analytics View */}
                {activeView === 'AUDIT_LOGS' && (
-                  <div className="space-y-6 animate-fade-in">
+                  <div className="space-y-4 sm:space-y-6 animate-fade-in pb-10">
                      <div>
-                        <h1 className="text-3xl font-bold text-slate-900 mb-2">Business Analytics & Audit Logs</h1>
-                        <p className="text-slate-500">Revenue metrics, business intelligence, and system activity</p>
+                        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Business Analytics & Audit Logs</h1>
+                        <p className="text-slate-500 text-sm sm:text-base">Revenue metrics, business intelligence, and system activity</p>
                      </div>
 
                      {/* Revenue & Business Metrics */}
-                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                     <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                         <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-lg">
-                           <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Total Revenue</p>
-                           <h2 className="text-3xl font-bold mb-1">৳12.5M</h2>
-                           <p className="text-sm text-white/90">+15.3% from last month</p>
+                           <p className="text-white/80 text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1">Total Revenue</p>
+                           <h2 className="text-2xl sm:text-3xl font-bold mb-1">৳12.5M</h2>
+                           <p className="text-xs sm:text-sm text-white/90">+15.3% from last month</p>
                         </Card>
                         <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg">
-                           <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Active Subscriptions</p>
-                           <h2 className="text-3xl font-bold mb-1">2,847</h2>
-                           <p className="text-sm text-white/90">+8.2% growth</p>
+                           <p className="text-white/80 text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1">Active Subscriptions</p>
+                           <h2 className="text-2xl sm:text-3xl font-bold mb-1">2,847</h2>
+                           <p className="text-xs sm:text-sm text-white/90">+8.2% growth</p>
                         </Card>
                         <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg">
-                           <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Avg Transaction</p>
-                           <h2 className="text-3xl font-bold mb-1">৳4,387</h2>
-                           <p className="text-sm text-white/90">Per appointment</p>
+                           <p className="text-white/80 text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1">Avg Transaction</p>
+                           <h2 className="text-2xl sm:text-3xl font-bold mb-1">৳4,387</h2>
+                           <p className="text-xs sm:text-sm text-white/90">Per appointment</p>
                         </Card>
                         <Card className="bg-gradient-to-br from-amber-500 to-amber-600 text-white border-0 shadow-lg">
-                           <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Monthly Growth</p>
-                           <h2 className="text-3xl font-bold mb-1">23.4%</h2>
-                           <p className="text-sm text-white/90">Year over year</p>
+                           <p className="text-white/80 text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1">Monthly Growth</p>
+                           <h2 className="text-2xl sm:text-3xl font-bold mb-1">23.4%</h2>
+                           <p className="text-xs sm:text-sm text-white/90">Year over year</p>
                         </Card>
                      </div>
 
                      {/* Revenue Chart & Business Type Distribution */}
-                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                         {/* Revenue Trend */}
                         <Card className="shadow-lg bg-white">
-                           <h3 className="text-lg font-bold text-slate-900 mb-4">Revenue Trend (Last 7 Days)</h3>
+                           <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4">Revenue Trend (Last 7 Days)</h3>
                            <div className="space-y-3">
                               {[
                                  { day: 'Mon', revenue: 145000, percentage: 65 },
@@ -483,7 +498,7 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
 
                         {/* Business Type Distribution */}
                         <Card className="shadow-lg bg-white">
-                           <h3 className="text-lg font-bold text-slate-900 mb-4">Revenue by Service Type</h3>
+                           <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4">Revenue by Service Type</h3>
                            <div className="space-y-4">
                               {[
                                  { type: 'Consultations', revenue: 5200000, percentage: 42, color: 'blue' },
@@ -526,16 +541,16 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
 
                      {/* Hospital Performance Rankings */}
                      <Card className="shadow-lg bg-white">
-                        <h3 className="text-lg font-bold text-slate-900 mb-4">Top Performing Hospitals (Revenue)</h3>
-                        <div className="overflow-x-auto">
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4">Top Performing Hospitals (Revenue)</h3>
+                        <div className="overflow-x-auto -mx-4 sm:mx-0">
                            <table className="w-full">
                               <thead className="bg-slate-50 border-b-2 border-slate-200">
                                  <tr>
-                                    <th className="p-3 text-left font-semibold text-slate-700">Rank</th>
-                                    <th className="p-3 text-left font-semibold text-slate-700">Hospital</th>
-                                    <th className="p-3 text-left font-semibold text-slate-700">Revenue (Monthly)</th>
-                                    <th className="p-3 text-left font-semibold text-slate-700">Patients</th>
-                                    <th className="p-3 text-left font-semibold text-slate-700">Growth</th>
+                                    <th className="p-2 sm:p-3 text-left font-semibold text-slate-700 text-xs sm:text-sm">Rank</th>
+                                    <th className="p-2 sm:p-3 text-left font-semibold text-slate-700 text-xs sm:text-sm">Hospital</th>
+                                    <th className="p-2 sm:p-3 text-left font-semibold text-slate-700 text-xs sm:text-sm">Revenue (Monthly)</th>
+                                    <th className="p-2 sm:p-3 text-left font-semibold text-slate-700 text-xs sm:text-sm hidden sm:table-cell">Patients</th>
+                                    <th className="p-2 sm:p-3 text-left font-semibold text-slate-700 text-xs sm:text-sm hidden md:table-cell">Growth</th>
                                  </tr>
                               </thead>
                               <tbody>
@@ -547,7 +562,7 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
                                     { rank: 5, name: 'Labaid Hospital', revenue: 1420000, patients: 521, growth: '+12.8%' }
                                  ].map((hospital) => (
                                     <tr key={hospital.rank} className="border-b border-slate-100 hover:bg-slate-50">
-                                       <td className="p-3">
+                                       <td className="p-2 sm:p-3">
                                           <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${hospital.rank === 1 ? 'bg-amber-100 text-amber-600' :
                                              hospital.rank === 2 ? 'bg-slate-100 text-slate-600' :
                                                 hospital.rank === 3 ? 'bg-orange-100 text-orange-600' :
@@ -556,10 +571,10 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
                                              #{hospital.rank}
                                           </span>
                                        </td>
-                                       <td className="p-3 font-medium text-slate-900">{hospital.name}</td>
-                                       <td className="p-3 font-semibold text-emerald-600">৳{hospital.revenue.toLocaleString()}</td>
-                                       <td className="p-3 text-slate-600">{hospital.patients.toLocaleString()}</td>
-                                       <td className="p-3">
+                                       <td className="p-2 sm:p-3 font-medium text-slate-900 text-sm">{hospital.name}</td>
+                                       <td className="p-2 sm:p-3 font-semibold text-emerald-600 text-sm">৳{hospital.revenue.toLocaleString()}</td>
+                                       <td className="p-2 sm:p-3 text-slate-600 text-sm hidden sm:table-cell">{hospital.patients.toLocaleString()}</td>
+                                       <td className="p-2 sm:p-3 hidden md:table-cell">
                                           <Badge color="green">{hospital.growth}</Badge>
                                        </td>
                                     </tr>
@@ -571,7 +586,7 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
 
                      {/* System Activity Charts */}
                      {chartData.length > 0 && (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                            <Card className="shadow-lg bg-white">
                               <div className="flex items-center gap-2 mb-6">
                                  <BarChart3 className="text-indigo-600" size={24} />
@@ -600,30 +615,30 @@ export const SuperAdminPortal = ({ onBack }: { onBack: () => void }) => {
                            </Card>
 
                            <Card className="shadow-lg bg-white">
-                              <div className="flex items-center gap-2 mb-6">
-                                 <TrendingUp className="text-emerald-600" size={24} />
-                                 <h3 className="text-lg font-bold text-slate-900">Activity Summary</h3>
+                              <div className="flex items-center gap-2 mb-4 sm:mb-6">
+                                 <TrendingUp className="text-emerald-600" size={20} />
+                                 <h3 className="text-base sm:text-lg font-bold text-slate-900">Activity Summary</h3>
                               </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                 <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-                                    <p className="text-sm font-medium text-blue-900 mb-1">Total</p>
-                                    <p className="text-3xl font-bold text-blue-600">{auditLogs.length}</p>
+                              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                                 <div className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
+                                    <p className="text-xs sm:text-sm font-medium text-blue-900 mb-1">Total</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-blue-600">{auditLogs.length}</p>
                                  </div>
-                                 <div className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg border border-emerald-200">
-                                    <p className="text-sm font-medium text-emerald-900 mb-1">Creates</p>
-                                    <p className="text-3xl font-bold text-emerald-600">
+                                 <div className="p-3 sm:p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg border border-emerald-200">
+                                    <p className="text-xs sm:text-sm font-medium text-emerald-900 mb-1">Creates</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-emerald-600">
                                        {auditLogs.filter(l => l.action_type === 'CREATE').length}
                                     </p>
                                  </div>
-                                 <div className="p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200">
-                                    <p className="text-sm font-medium text-amber-900 mb-1">Updates</p>
-                                    <p className="text-3xl font-bold text-amber-600">
+                                 <div className="p-3 sm:p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200">
+                                    <p className="text-xs sm:text-sm font-medium text-amber-900 mb-1">Updates</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-amber-600">
                                        {auditLogs.filter(l => l.action_type === 'UPDATE').length}
                                     </p>
                                  </div>
-                                 <div className="p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border border-red-200">
-                                    <p className="text-sm font-medium text-red-900 mb-1">Deletes</p>
-                                    <p className="text-3xl font-bold text-red-600">
+                                 <div className="p-3 sm:p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border border-red-200">
+                                    <p className="text-xs sm:text-sm font-medium text-red-900 mb-1">Deletes</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-red-600">
                                        {auditLogs.filter(l => l.action_type === 'DELETE').length}
                                     </p>
                                  </div>

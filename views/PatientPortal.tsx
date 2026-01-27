@@ -665,13 +665,13 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
 
           {/* --- VIEW: TELEMEDICINE --- */}
           {viewMode === 'TELEMEDICINE' && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="flex items-center justify-between">
+            <div className="space-y-4 sm:space-y-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900">Telemedicine Sessions</h2>
-                  <p className="text-gray-600 mt-1">Your video consultation history and upcoming sessions</p>
+                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Telemedicine Sessions</h2>
+                  <p className="text-gray-600 mt-1 text-sm sm:text-base">Your video consultation history and upcoming sessions</p>
                 </div>
-                <Button onClick={() => setViewMode('DASHBOARD')} variant="outline" className="flex items-center gap-2">
+                <Button onClick={() => setViewMode('DASHBOARD')} variant="outline" className="flex items-center gap-2 justify-center min-h-[44px]">
                   <CalendarClock size={18} /> Book New Session
                 </Button>
               </div>
@@ -695,21 +695,21 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                     .sort((a, b) => new Date(`${b.date} ${b.time}`).getTime() - new Date(`${a.date} ${a.time}`).getTime()) // Newest first
                     .map(apt => (
                       <Card key={apt.id} className="hover:border-purple-200 transition-all border-l-4 border-l-purple-500">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
-                              <Video size={24} />
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 sm:p-5">
+                          <div className="flex items-center gap-3 sm:gap-4">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
+                              <Video size={20} className="sm:w-6 sm:h-6" />
                             </div>
                             <div>
-                              <h4 className="font-bold text-slate-900 text-lg">{apt.doctorName}</h4>
-                              <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
+                              <h4 className="font-bold text-slate-900 text-base sm:text-lg">{apt.doctorName}</h4>
+                              <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-slate-500 mt-1">
                                 <span className="flex items-center gap-1"><Calendar size={14} /> {apt.date}</span>
                                 <span className="flex items-center gap-1"><Clock size={14} /> {apt.time}</span>
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3 w-full md:w-auto">
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                             {apt.queueNumber && (
                               <Badge variant="blue" className="mr-2">
                                 Queue #{apt.queueNumber}
@@ -722,14 +722,14 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                             {apt.status === 'CONFIRMED' && (
                               <Button
                                 onClick={() => onNavigate('telemedicine', apt)}
-                                className="bg-purple-600 hover:bg-purple-700 text-white flex-1 md:flex-none"
+                                className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto min-h-[44px]"
                               >
                                 Join Call
                               </Button>
                             )}
 
                             {apt.status === 'COMPLETED' && (
-                              <Button variant="outline" className="flex-1 md:flex-none" onClick={() => handleWriteReview(apt)}>
+                              <Button variant="outline" className="w-full sm:w-auto min-h-[44px]" onClick={() => handleWriteReview(apt)}>
                                 <Star size={16} className="mr-2" /> Rate
                               </Button>
                             )}
@@ -982,7 +982,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
 
           {/* --- VIEW: PHYSICAL APPOINTMENTS --- */}
           {viewMode === 'PHYSICAL_APPOINTMENTS' && (
-            <div className="space-y-6 animate-fade-in pb-20">
+            <div className="space-y-4 sm:space-y-6 animate-fade-in pb-20">
               <Card>
                 <div className="space-y-4">
                   {isLoadingAppointments ? (
@@ -1012,15 +1012,15 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                           <div
                             key={apt.id}
                             onClick={() => openQueueTracker(apt)}
-                            className={`flex flex-col md:flex-row md:items-center justify-between p-5 bg-white rounded-xl border shadow-sm transition-all cursor-pointer group ${appointmentStatus === 'CANCELLED' ? 'opacity-60 border-slate-100 bg-slate-50' : 'border-slate-100 hover:shadow-md hover:border-primary-200'}`}
+                            className={`flex flex-col md:flex-row md:items-center justify-between p-4 sm:p-5 bg-white rounded-xl border shadow-sm transition-all cursor-pointer group ${appointmentStatus === 'CANCELLED' ? 'opacity-60 border-slate-100 bg-slate-50' : 'border-slate-100 hover:shadow-md hover:border-primary-200'}`}
                           >
-                            <div className="flex items-center gap-5 mb-4 md:mb-0">
-                              <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-sm ${appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED' ? 'bg-green-100 text-green-600' : appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'bg-red-50 text-red-300' : 'bg-orange-100 text-orange-600'}`}>
+                            <div className="flex items-center gap-3 sm:gap-5 mb-4 md:mb-0">
+                              <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shadow-sm ${appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED' ? 'bg-green-100 text-green-600' : appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'bg-red-50 text-red-300' : 'bg-orange-100 text-orange-600'}`}>
                                 {isTelemedicine ? <Video size={24} /> : <MapPin size={24} />}
                               </div>
                               <div>
-                                <h3 className={`font-bold text-lg transition-colors ${appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-primary-600'}`}>{apt.doctorName}</h3>
-                                <div className="text-sm text-slate-500 space-y-1">
+                                <h3 className={`font-bold text-base sm:text-lg transition-colors ${appointmentStatus === 'CANCELLED' || appointmentStatus === 'REJECTED' ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-primary-600'}`}>{apt.doctorName}</h3>
+                                <div className="text-xs sm:text-sm text-slate-500 space-y-1">
                                   <p className="flex items-center gap-2"><Calendar size={14} /> {new Date(apt.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>
                                   <p className="flex items-center gap-2"><Clock size={14} /> {apt.time}</p>
                                   {apt.queueNumber && (
@@ -1031,12 +1031,12 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                                 </div>
                               </div>
                             </div>
-                            <div className="text-right flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-2 md:gap-1 pl-14 md:pl-0">
+                            <div className="flex flex-col gap-2 md:items-end md:text-right">
                               {/* Live Queue Tracker Button */}
                               {(appointmentStatus === 'PENDING' || appointmentStatus === 'IN_PROGRESS' || appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); openQueueTracker(apt); }}
-                                  className="w-full flex items-center justify-center gap-2 mb-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-all animate-fade-in"
+                                  className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition-all animate-fade-in min-h-[44px]"
                                 >
                                   <span className="relative flex h-3 w-3">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
@@ -1047,7 +1047,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                               )}
 
                               {(appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
-                                <div className="flex items-center gap-2 mb-1 bg-green-50 px-3 py-1 rounded-full border border-green-100">
+                                <div className="flex items-center gap-2 bg-green-50 px-3 py-1.5 rounded-full border border-green-100 justify-center md:justify-start">
                                   <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                                   <span className="text-xs font-bold text-green-700">Live Queue Active</span>
                                 </div>
@@ -1057,7 +1057,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                               {(appointmentStatus === 'PENDING' || appointmentStatus === 'CONFIRMED' || appointmentStatus === 'ACCEPTED') && (
                                 <button
                                   onClick={(e) => handleCancelClick(e, apt.id)}
-                                  className="text-xs text-red-500 hover:text-red-700 font-medium hover:underline mt-1 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                                  className="text-xs sm:text-sm text-red-500 hover:text-red-700 font-medium hover:underline px-3 py-2 rounded hover:bg-red-50 transition-colors min-h-[40px] w-full md:w-auto"
                                 >
                                   Cancel Appointment
                                 </button>
@@ -1070,12 +1070,12 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                                     e.stopPropagation();
                                     handleWriteReview(apt);
                                   }}
-                                  className={`text-xs font-medium hover:underline mt-1 px-2 py-1 rounded transition-colors flex items-center gap-1 ${(apt as any).review
+                                  className={`text-xs sm:text-sm font-medium hover:underline px-3 py-2 rounded transition-colors flex items-center justify-center gap-1.5 min-h-[40px] w-full md:w-auto ${(apt as any).review
                                     ? 'text-green-600 hover:text-green-800 hover:bg-green-50'
                                     : 'text-primary-600 hover:text-primary-800 hover:bg-primary-50'
                                     }`}
                                 >
-                                  {(apt as any).review ? <Edit2 size={12} /> : <Star size={12} />}
+                                  {(apt as any).review ? <Edit2 size={14} /> : <Star size={14} />}
                                   {(apt as any).review ? 'Edit Review' : 'Write Review'}
                                 </button>
                               )}
@@ -1128,30 +1128,30 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
 
           {/* --- VIEW: DASHBOARD (FIND DOCTOR) --- */}
           {viewMode === 'DASHBOARD' && (
-            <div className="space-y-8 animate-fade-in pb-20">
+            <div className="space-y-6 sm:space-y-8 animate-fade-in pb-20">
 
               {/* Header & AI Symptom Checker */}
-              <section className="bg-primary-600 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
+              <section className="bg-primary-600 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
                 {/* ... (AI Logic same as before) ... */}
                 <div className="relative z-10 max-w-2xl">
-                  <h1 className="text-3xl font-bold mb-4">Find the Right Care</h1>
-                  <p className="text-primary-100 mb-6">Describe your symptoms to get AI recommendations, or search manually below.</p>
+                  <h1 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4">Find the Right Care</h1>
+                  <p className="text-primary-100 mb-4 sm:mb-6 text-sm sm:text-base">Describe your symptoms to get AI recommendations, or search manually below.</p>
 
-                  <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/20 shadow-inner">
-                    <div className="flex items-start gap-3">
-                      <Activity className="text-primary-200 mt-2" size={20} />
+                  <div className="bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 shadow-inner">
+                    <div className="flex items-start gap-2 sm:gap-3">
+                      <Activity className="text-primary-200 mt-2 flex-shrink-0" size={18} />
                       <textarea
-                        className="w-full bg-white text-slate-900 rounded-lg p-3 placeholder-slate-400 border-none focus:ring-0 resize-none h-20 text-lg"
+                        className="w-full bg-white text-slate-900 rounded-lg p-2 sm:p-3 placeholder-slate-400 border-none focus:ring-0 resize-none h-16 sm:h-20 text-sm sm:text-base"
                         placeholder="e.g., I have a severe headache and nausea since morning..."
                         value={symptomInput}
                         onChange={(e) => setSymptomInput(e.target.value)}
                       />
                     </div>
-                    <div className="flex justify-between items-center mt-2 border-t border-white/10 pt-2">
-                      <span className="text-xs text-primary-200">Powered by Gemini AI</span>
+                    <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center mt-2 border-t border-white/10 pt-2 gap-2">
+                      <span className="text-[10px] sm:text-xs text-primary-200">Powered by Gemini AI</span>
                       <Button
                         variant="secondary"
-                        className="bg-white text-primary-700 hover:bg-primary-50 hover:text-primary-800 text-sm py-1.5 px-4 h-auto shadow-none"
+                        className="bg-white text-primary-700 hover:bg-primary-50 hover:text-primary-800 text-xs sm:text-sm py-1.5 px-3 sm:px-4 h-auto shadow-none min-h-[40px]"
                         onClick={handleSymptomAnalysis}
                         loading={isAnalyzing}
                       >
@@ -1183,15 +1183,15 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                 )}
 
                 {/* ... Search & Filter UI (same as before) ... */}
-                <div className="flex flex-col gap-4 mb-6">
+                <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6">
                   {/* Search inputs... */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="md:col-span-2 relative">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="sm:col-span-2 relative">
                       <Search className="absolute left-3 top-3.5 text-slate-400" size={18} />
                       <input
                         type="text"
                         placeholder="Search doctor or hospital..."
-                        className="w-full pl-10 p-3 rounded-xl border border-slate-200 shadow-sm bg-white focus:ring-2 focus:ring-primary-500"
+                        className="w-full pl-10 p-3 rounded-xl border border-slate-200 shadow-sm bg-white focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                       />
@@ -1199,7 +1199,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                     <div className="relative">
                       <MapPin className="absolute left-3 top-3.5 text-slate-400" size={18} />
                       <select
-                        className="w-full pl-10 p-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-primary-500 bg-white"
+                        className="w-full pl-10 p-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-primary-500 bg-white text-sm sm:text-base"
                         value={selectedCity}
                         onChange={(e) => setSelectedCity(e.target.value)}
                       >
@@ -1209,7 +1209,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                     <div className="relative">
                       <Filter className="absolute left-3 top-3.5 text-slate-400" size={18} />
                       <select
-                        className="w-full pl-10 p-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-primary-500 bg-white"
+                        className="w-full pl-10 p-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-primary-500 bg-white text-sm sm:text-base"
                         value={selectedSpecialty}
                         onChange={(e) => setSelectedSpecialty(e.target.value)}
                       >
@@ -1220,7 +1220,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                 </div>
 
                 {/* Results Grid - UPDATED DOCTOR CARD */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {isLoadingDoctors ? (
                     // Loading skeleton
                     Array.from({ length: 8 }).map((_, i) => (
@@ -1245,46 +1245,46 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                     filteredDoctors.map(doctor => (
                       <div key={doctor.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden group flex flex-col">
                         {/* Doctor Image Header */}
-                        <div className="h-48 overflow-hidden relative bg-slate-100">
+                        <div className="h-40 sm:h-48 overflow-hidden relative bg-slate-100">
                           <img src={doctor.image} alt={doctor.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
 
                           {/* Verified Badge Overlay */}
                           {doctor.isVerified && (
-                            <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm text-green-700">
+                            <div className="absolute top-2 sm:top-3 left-2 sm:left-3 bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold flex items-center gap-1 shadow-sm text-green-700">
                               <CheckCircle size={12} fill="currentColor" className="text-white" /> BMDC Verified
                             </div>
                           )}
 
-                          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
+                          <div className="absolute top-2 sm:top-3 right-2 sm:right-3 bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold flex items-center gap-1 shadow-sm">
                             <Star size={12} className="text-yellow-500 fill-yellow-500" /> {doctor.rating}
                           </div>
                         </div>
 
-                        <div className="p-5 flex-1 flex flex-col">
-                          <h3 className="font-bold text-lg text-slate-900 leading-tight mb-1">{doctor.name}</h3>
-                          <p className="text-primary-600 font-medium text-sm mb-2">{doctor.specialization}</p>
+                        <div className="p-4 sm:p-5 flex-1 flex flex-col">
+                          <h3 className="font-bold text-base sm:text-lg text-slate-900 leading-tight mb-1">{doctor.name}</h3>
+                          <p className="text-primary-600 font-medium text-xs sm:text-sm mb-2">{doctor.specialization}</p>
 
                           {/* Rich Profile Details Summary */}
-                          <div className="text-xs text-slate-500 mb-4 space-y-1.5">
+                          <div className="text-[11px] sm:text-xs text-slate-500 mb-3 sm:mb-4 space-y-1.5">
                             <p className="flex items-center gap-1.5 font-medium"><GraduationCap size={12} /> {doctor.degrees?.join(', ') || 'MBBS'}</p>
                             <p className="flex items-center gap-1.5"><MapPin size={12} /> {doctor.hospital}</p>
                             <p className="flex items-center gap-1.5"><Languages size={12} /> {doctor.languages?.join(', ') || 'Bangla, English'}</p>
                           </div>
 
-                          <div className="mt-auto pt-4 border-t border-slate-50">
+                          <div className="mt-auto pt-3 sm:pt-4 border-t border-slate-50">
                             <div className="flex justify-between items-center mb-3">
                               <div>
-                                <p className="text-[10px] text-slate-400 uppercase tracking-wide font-bold">Physical</p>
-                                <p className="font-bold text-slate-900">৳{doctor.fees.physical}</p>
+                                <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-wide font-bold">Physical</p>
+                                <p className="font-bold text-slate-900 text-sm sm:text-base">৳{doctor.fees.physical}</p>
                               </div>
                               <div className="text-right">
-                                <p className="text-[10px] text-slate-400 uppercase tracking-wide font-bold">Online</p>
-                                <p className="font-bold text-slate-900">৳{doctor.fees.online}</p>
+                                <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-wide font-bold">Online</p>
+                                <p className="font-bold text-slate-900 text-sm sm:text-base">৳{doctor.fees.online}</p>
                               </div>
                             </div>
                             <Button
                               onClick={() => handleBookClick(doctor)}
-                              className="w-full rounded-xl shadow-primary-500/30"
+                              className="w-full rounded-xl shadow-primary-500/30 min-h-[44px] text-sm sm:text-base"
                             >
                               View Profile & Book
                             </Button>

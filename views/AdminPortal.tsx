@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     LayoutDashboard, Users, Calendar, Clock, Video, FileText,
     Ambulance, Building2, CreditCard, Star, Settings, LogOut,
@@ -126,6 +126,8 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
     // Feedback State
     const [reviews, setReviews] = useState<any[]>([]);
     const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+    const [reviewsPerPage, setReviewsPerPage] = useState(10);
+    const [currentReviewPage, setCurrentReviewPage] = useState(1);
 
     // Fetch reviews when on Feedback view
     useEffect(() => {
@@ -146,6 +148,32 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
             fetchReviews();
         }
     }, [activeView]);
+
+    // Memoize feedback statistics to avoid recalculating on every render
+    const feedbackStats = useMemo(() => {
+        if (reviews.length === 0) return null;
+
+        return {
+            averageRating: (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1),
+            totalReviews: reviews.length,
+            verifiedCount: reviews.filter(r => r.isVerified).length,
+            fiveStarCount: reviews.filter(r => r.rating === 5).length,
+            ratingDistribution: [5, 4, 3, 2, 1].map(rating => ({
+                rating,
+                count: reviews.filter(r => r.rating === rating).length,
+                percentage: (reviews.filter(r => r.rating === rating).length / reviews.length) * 100
+            }))
+        };
+    }, [reviews]);
+
+    // Paginate reviews
+    const paginatedReviews = useMemo(() => {
+        const startIndex = (currentReviewPage - 1) * reviewsPerPage;
+        const endIndex = startIndex + reviewsPerPage;
+        return reviews.slice(startIndex, endIndex);
+    }, [reviews, currentReviewPage, reviewsPerPage]);
+
+    const totalReviewPages = Math.ceil(reviews.length / reviewsPerPage);
 
     // Fetch hospital resources on mount
     useEffect(() => {
@@ -871,18 +899,18 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
 
                     {/* --- DASHBOARD VIEW --- */}
                     {activeView === 'DASHBOARD' && (
-                        <div className="space-y-6 animate-fade-in pb-10">
+                        <div className="space-y-4 sm:space-y-6 animate-fade-in pb-10">
                             {/* Metrics Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                                 <Card className="bg-white border-l-4 border-l-blue-500">
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <p className="text-slate-500 font-bold text-xs uppercase tracking-wide">Appointments Today</p>
-                                            <h2 className="text-3xl font-heading font-bold text-slate-900 mt-1">42</h2>
+                                            <p className="text-slate-500 font-bold text-[10px] sm:text-xs uppercase tracking-wide">Appointments Today</p>
+                                            <h2 className="text-2xl sm:text-3xl font-heading font-bold text-slate-900 mt-1">42</h2>
                                         </div>
-                                        <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><Calendar size={20} /></div>
+                                        <div className="p-2 sm:p-2.5 bg-blue-50 text-blue-600 rounded-xl"><Calendar size={18} className="sm:w-5 sm:h-5" /></div>
                                     </div>
-                                    <div className="mt-3 text-xs text-blue-600 font-bold flex gap-2 bg-blue-50 px-2 py-1 rounded inline-block">
+                                    <div className="mt-2 sm:mt-3 text-[10px] sm:text-xs text-blue-600 font-bold flex gap-1 sm:gap-2 bg-blue-50 px-2 py-1 rounded inline-block">
                                         <span>28 Physical</span> <span>•</span> <span>14 Online</span>
                                     </div>
                                 </Card>
@@ -924,12 +952,12 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                 </Card>
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                                 {/* Revenue Chart */}
                                 <Card className="lg:col-span-2">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h3 className="font-bold text-lg text-slate-800 font-heading">Revenue Analytics</h3>
-                                        <select className="text-sm border-slate-200 rounded-lg p-1.5 bg-white">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
+                                        <h3 className="font-bold text-base sm:text-lg text-slate-800 font-heading">Revenue Analytics</h3>
+                                        <select className="text-xs sm:text-sm border-slate-200 rounded-lg p-1.5 bg-white w-full sm:w-auto">
                                             <option>This Week</option>
                                             <option>This Month</option>
                                         </select>
@@ -1413,28 +1441,28 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                     {/* --- APPOINTMENTS MANAGEMENT --- */}
                     {
                         activeView === 'APPOINTMENTS' && (
-                            <div className="space-y-6 animate-fade-in pb-10">
+                            <div className="space-y-4 sm:space-y-6 animate-fade-in pb-10">
                                 <div>
-                                    <h3 className="text-xl font-bold text-slate-900 font-heading">Appointments</h3>
-                                    <p className="text-slate-500 text-sm">View and manage all hospital appointments</p>
+                                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 font-heading">Appointments</h3>
+                                    <p className="text-slate-500 text-xs sm:text-sm">View and manage all hospital appointments</p>
                                 </div>
 
                                 {/* Filters */}
-                                <div className="flex flex-wrap gap-4 bg-white p-4 rounded-xl border border-slate-200">
-                                    <div className="flex-1 min-w-[200px]">
+                                <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 bg-white p-3 sm:p-4 rounded-xl border border-slate-200">
+                                    <div className="flex-1 min-w-full sm:min-w-[200px]">
                                         <div className="relative">
                                             <Search className="absolute left-3 top-3 text-slate-400" size={18} />
                                             <input
                                                 type="text"
                                                 placeholder="Search by patient name or ID..."
-                                                className="w-full pl-10 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="w-full pl-10 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                                                 value={appointmentFilter.search}
                                                 onChange={(e) => setAppointmentFilter({ ...appointmentFilter, search: e.target.value })}
                                             />
                                         </div>
                                     </div>
                                     <select
-                                        className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] w-full sm:w-auto"
                                         value={appointmentFilter.status}
                                         onChange={(e) => setAppointmentFilter({ ...appointmentFilter, status: e.target.value })}
                                     >
@@ -1445,7 +1473,7 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                     </select>
                                     <input
                                         type="date"
-                                        className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] w-full sm:w-auto"
                                         value={appointmentFilter.date}
                                         onChange={(e) => setAppointmentFilter({ ...appointmentFilter, date: e.target.value })}
                                     />
@@ -1453,54 +1481,57 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
 
                                 {/* Appointments Table */}
                                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                    <table className="w-full">
-                                        <thead className="bg-slate-50 border-b border-slate-200">
-                                            <tr>
-                                                <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Patient</th>
-                                                <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Doctor</th>
-                                                <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Date & Time</th>
-                                                <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Status</th>
-                                                <th className="text-right p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {appointments.length === 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead className="bg-slate-50 border-b border-slate-200">
                                                 <tr>
-                                                    <td colSpan={5} className="p-8 text-center text-slate-500">
-                                                        No appointments found matching your filters
-                                                    </td>
+                                                    <th className="text-left p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Patient</th>
+                                                    <th className="text-left p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide hidden md:table-cell">Doctor</th>
+                                                    <th className="text-left p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Date & Time</th>
+                                                    <th className="text-left p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide hidden sm:table-cell">Status</th>
+                                                    <th className="text-right p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Actions</th>
                                                 </tr>
-                                            ) : (
-                                                appointments.map((apt: any) => (
-                                                    <tr key={apt.id} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="p-4">
-                                                            <div className="font-bold text-slate-900">{apt.patientName}</div>
-                                                            <div className="text-xs text-slate-500">ID: #{apt.patientId}</div>
-                                                        </td>
-                                                        <td className="p-4">
-                                                            <div className="font-medium text-slate-900">{apt.doctorName}</div>
-                                                            <div className="text-xs text-slate-500">{apt.specialization}</div>
-                                                        </td>
-                                                        <td className="p-4">
-                                                            <div className="font-medium text-slate-900">{new Date(apt.date).toLocaleDateString()}</div>
-                                                            <div className="text-xs text-slate-500">{apt.time}</div>
-                                                        </td>
-                                                        <td className="p-4">
-                                                            <Badge variant={
-                                                                apt.status === 'Completed' ? 'success' :
-                                                                    apt.status === 'Cancelled' ? 'danger' : 'warning'
-                                                            }>
-                                                                {apt.status}
-                                                            </Badge>
-                                                        </td>
-                                                        <td className="p-4 text-right">
-                                                            <Button variant="outline" size="sm">Details</Button>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {appointments.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={5} className="p-8 text-center text-slate-500">
+                                                            No appointments found matching your filters
                                                         </td>
                                                     </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
+                                                ) : (
+                                                    appointments.map((apt: any) => (
+                                                        <tr key={apt.id} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="p-3 sm:p-4">
+                                                                <div className="font-bold text-slate-900 text-sm sm:text-base">{apt.patientName}</div>
+                                                                <div className="text-xs text-slate-500">ID: #{apt.patientId}</div>
+                                                                <div className="text-xs text-slate-500 md:hidden mt-1">{apt.doctorName}</div>
+                                                            </td>
+                                                            <td className="p-3 sm:p-4 hidden md:table-cell">
+                                                                <div className="font-medium text-slate-900">{apt.doctorName}</div>
+                                                                <div className="text-xs text-slate-500">{apt.specialization}</div>
+                                                            </td>
+                                                            <td className="p-3 sm:p-4">
+                                                                <div className="font-medium text-slate-900 text-xs sm:text-sm">{new Date(apt.date).toLocaleDateString()}</div>
+                                                                <div className="text-xs text-slate-500">{apt.time}</div>
+                                                            </td>
+                                                            <td className="p-3 sm:p-4 hidden sm:table-cell">
+                                                                <Badge variant={
+                                                                    apt.status === 'Completed' ? 'success' :
+                                                                        apt.status === 'Cancelled' ? 'danger' : 'warning'
+                                                                }>
+                                                                    {apt.status}
+                                                                </Badge>
+                                                            </td>
+                                                            <td className="p-3 sm:p-4 text-right">
+                                                                <Button variant="outline" size="sm" className="min-h-[40px] text-xs sm:text-sm px-2 sm:px-3">Details</Button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         )
@@ -1682,8 +1713,8 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                     // OVERVIEW: All doctors schedule summary
                                     <>
                                         <div>
-                                            <h3 className="text-xl font-bold text-slate-900 font-heading">Doctor Schedule Overview</h3>
-                                            <p className="text-slate-500 text-sm">Manage availability schedules for all doctors</p>
+                                            <h3 className="text-lg sm:text-xl font-bold text-slate-900 font-heading">Doctor Schedule Overview</h3>
+                                            <p className="text-slate-500 text-xs sm:text-sm">Manage availability schedules for all doctors</p>
                                         </div>
 
                                         {isLoadingSchedules ? (
@@ -1698,67 +1729,71 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                             </Card>
                                         ) : (
                                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                                <table className="w-full">
-                                                    <thead className="bg-slate-50 border-b border-slate-200">
-                                                        <tr>
-                                                            <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Doctor</th>
-                                                            <th className="text-left p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Specialization</th>
-                                                            <th className="text-center p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Slots</th>
-                                                            <th className="text-center p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Active</th>
-                                                            <th className="text-center p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Inactive</th>
-                                                            <th className="text-right p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Actions</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-100">
-                                                        {schedules.map((schedule: any) => (
-                                                            <tr key={schedule.id} className="hover:bg-slate-50 transition-colors">
-                                                                <td className="p-4">
-                                                                    <div className="font-bold text-slate-900">{schedule.name}</div>
-                                                                </td>
-                                                                <td className="p-4 text-slate-600">{schedule.specialization}</td>
-                                                                <td className="p-4 text-center">
-                                                                    <Badge variant={schedule.total_slots > 0 ? 'success' : 'default'}>
-                                                                        {schedule.total_slots}
-                                                                    </Badge>
-                                                                </td>
-                                                                <td className="p-4 text-center">
-                                                                    <Badge variant="success">{schedule.active_slots}</Badge>
-                                                                </td>
-                                                                <td className="p-4 text-center">
-                                                                    <Badge variant="default">{schedule.inactive_slots}</Badge>
-                                                                </td>
-                                                                <td className="p-4 text-right">
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        size="sm"
-                                                                        onClick={() => setSelectedDoctorSchedule(schedule.id)}
-                                                                    >
-                                                                        <Calendar size={16} className="mr-2" /> Manage Schedule
-                                                                    </Button>
-                                                                </td>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full">
+                                                        <thead className="bg-slate-50 border-b border-slate-200">
+                                                            <tr>
+                                                                <th className="text-left p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Doctor</th>
+                                                                <th className="text-left p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide hidden sm:table-cell">Specialization</th>
+                                                                <th className="text-center p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Slots</th>
+                                                                <th className="text-center p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide hidden md:table-cell">Active</th>
+                                                                <th className="text-center p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide hidden md:table-cell">Inactive</th>
+                                                                <th className="text-right p-3 sm:p-4 text-xs font-bold text-slate-600 uppercase tracking-wide">Actions</th>
                                                             </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100">
+                                                            {schedules.map((schedule: any) => (
+                                                                <tr key={schedule.id} className="hover:bg-slate-50 transition-colors">
+                                                                    <td className="p-3 sm:p-4">
+                                                                        <div className="font-bold text-slate-900 text-sm sm:text-base">{schedule.name}</div>
+                                                                        <div className="text-xs text-slate-500 sm:hidden">{schedule.specialization}</div>
+                                                                    </td>
+                                                                    <td className="p-3 sm:p-4 text-slate-600 text-sm hidden sm:table-cell">{schedule.specialization}</td>
+                                                                    <td className="p-3 sm:p-4 text-center">
+                                                                        <Badge variant={schedule.total_slots > 0 ? 'success' : 'default'}>
+                                                                            {schedule.total_slots}
+                                                                        </Badge>
+                                                                    </td>
+                                                                    <td className="p-3 sm:p-4 text-center hidden md:table-cell">
+                                                                        <Badge variant="success">{schedule.active_slots}</Badge>
+                                                                    </td>
+                                                                    <td className="p-3 sm:p-4 text-center hidden md:table-cell">
+                                                                        <Badge variant="default">{schedule.inactive_slots}</Badge>
+                                                                    </td>
+                                                                    <td className="p-3 sm:p-4 text-right">
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            onClick={() => setSelectedDoctorSchedule(schedule.id)}
+                                                                            className="min-h-[40px] text-xs sm:text-sm"
+                                                                        >
+                                                                            <Calendar size={14} className="mr-1 sm:mr-2" /> Manage
+                                                                        </Button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
                                         )}
                                     </>
                                 ) : (
                                     // DETAILED VIEW: Individual doctor schedule management
                                     <>
-                                        <div className="flex justify-between items-center">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                             <div className="flex items-center gap-3">
-                                                <Button variant="outline" onClick={() => setSelectedDoctorSchedule(null)}>
+                                                <Button variant="outline" onClick={() => setSelectedDoctorSchedule(null)} className="min-h-[44px]">
                                                     <ArrowLeft size={18} />
                                                 </Button>
                                                 <div>
-                                                    <h3 className="text-xl font-bold text-slate-900 font-heading">
+                                                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 font-heading">
                                                         {schedules.find(s => s.id === selectedDoctorSchedule)?.name}'s Schedule
                                                     </h3>
-                                                    <p className="text-slate-500 text-sm">Manage time slots and availability</p>
+                                                    <p className="text-slate-500 text-xs sm:text-sm">Manage time slots and availability</p>
                                                 </div>
                                             </div>
-                                            <Button onClick={handleAddSlotClick} className="flex items-center gap-2">
+                                            <Button onClick={handleAddSlotClick} className="flex items-center gap-2 justify-center min-h-[44px] w-full sm:w-auto">
                                                 <Plus size={18} /> Add Time Slot
                                             </Button>
                                         </div>
@@ -1790,11 +1825,11 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                                             </div>
                                                             <div className="space-y-3">
                                                                 {daySlots.map(slot => (
-                                                                    <div key={slot.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                                                        <div className="flex items-center gap-6">
-                                                                            <div>
-                                                                                <div className="font-bold text-slate-900">{slot.start_time} - {slot.end_time}</div>
-                                                                                <div className="text-sm text-slate-500">
+                                                                    <div key={slot.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-slate-50 rounded-xl border border-slate-100 gap-3">
+                                                                        <div className="flex items-start sm:items-center gap-3 sm:gap-6 flex-1">
+                                                                            <div className="flex-1">
+                                                                                <div className="font-bold text-slate-900 text-sm sm:text-base">{slot.start_time} - {slot.end_time}</div>
+                                                                                <div className="text-xs sm:text-sm text-slate-500">
                                                                                     {slot.max_patients} patients • {slot.consultation_duration} min/patient
                                                                                 </div>
                                                                             </div>
@@ -1802,27 +1837,30 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                                                                 {slot.is_active ? 'Active' : 'Inactive'}
                                                                             </Badge>
                                                                         </div>
-                                                                        <div className="flex gap-2">
+                                                                        <div className="flex gap-2 justify-end sm:justify-start">
                                                                             <Button
                                                                                 variant="outline"
                                                                                 size="sm"
                                                                                 onClick={() => handleToggleSlotStatus(slot.id)}
+                                                                                className="min-h-[40px] px-3"
                                                                             >
-                                                                                {slot.is_active ? <Pause size={16} /> : <Play size={16} />}
+                                                                                {slot.is_active ? <Pause size={14} /> : <Play size={14} />}
                                                                             </Button>
                                                                             <Button
                                                                                 variant="outline"
                                                                                 size="sm"
                                                                                 onClick={() => handleEditSlotClick(slot)}
+                                                                                className="min-h-[40px] px-3"
                                                                             >
-                                                                                <Edit3 size={16} />
+                                                                                <Edit3 size={14} />
                                                                             </Button>
                                                                             <Button
                                                                                 variant="danger"
                                                                                 size="sm"
                                                                                 onClick={() => handleDeleteSlot(slot.id)}
+                                                                                className="min-h-[40px] px-3"
                                                                             >
-                                                                                <Trash2 size={16} />
+                                                                                <Trash2 size={14} />
                                                                             </Button>
                                                                         </div>
                                                                     </div>
@@ -1841,37 +1879,37 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
 
                     {/* VIEW: TELEMEDICINE */}
                     {activeView === 'TELEMEDICINE' && (
-                        <div className="space-y-6 animate-fade-in">
-                            <div className="flex items-center justify-between">
+                        <div className="space-y-4 sm:space-y-6 animate-fade-in pb-10">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div>
-                                    <h2 className="text-2xl font-bold text-slate-900">Telemedicine Dashboard</h2>
-                                    <p className="text-gray-600 mt-1">Overview of all video consultations in the hospital</p>
+                                    <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Telemedicine Dashboard</h2>
+                                    <p className="text-gray-600 mt-1 text-xs sm:text-sm">Overview of all video consultations in the hospital</p>
                                 </div>
                             </div>
 
                             {/* Telemedicine Stats */}
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                                 <Card>
-                                    <p className="text-slate-500 font-medium mb-1">Total Sessions</p>
-                                    <h2 className="text-3xl font-bold text-slate-900">
+                                    <p className="text-slate-500 font-medium mb-1 text-xs sm:text-sm">Total Sessions</p>
+                                    <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
                                         {appointments.filter(a => a.consultationType === 'Telemedicine').length}
                                     </h2>
                                 </Card>
                                 <Card>
-                                    <p className="text-purple-600 font-medium mb-1">Today's Sessions</p>
-                                    <h2 className="text-3xl font-bold text-purple-900">
+                                    <p className="text-purple-600 font-medium mb-1 text-xs sm:text-sm">Today's Sessions</p>
+                                    <h2 className="text-2xl sm:text-3xl font-bold text-purple-900">
                                         {appointments.filter(a => a.consultationType === 'Telemedicine' && a.date === new Date().toISOString().split('T')[0]).length}
                                     </h2>
                                 </Card>
                                 <Card>
-                                    <p className="text-green-600 font-medium mb-1">Completed</p>
-                                    <h2 className="text-3xl font-bold text-green-900">
+                                    <p className="text-green-600 font-medium mb-1 text-xs sm:text-sm">Completed</p>
+                                    <h2 className="text-2xl sm:text-3xl font-bold text-green-900">
                                         {appointments.filter(a => a.consultationType === 'Telemedicine' && a.status === 'COMPLETED').length}
                                     </h2>
                                 </Card>
                                 <Card>
-                                    <p className="text-blue-600 font-medium mb-1">Pending</p>
-                                    <h2 className="text-3xl font-bold text-blue-900">
+                                    <p className="text-blue-600 font-medium mb-1 text-xs sm:text-sm">Pending</p>
+                                    <h2 className="text-2xl sm:text-3xl font-bold text-blue-900">
                                         {appointments.filter(a => a.consultationType === 'Telemedicine' && (a.status === 'PENDING' || a.status === 'CONFIRMED')).length}
                                     </h2>
                                 </Card>
@@ -1879,15 +1917,15 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
 
                             {/* Appointments List */}
                             <Card>
-                                <h3 className="font-bold text-lg mb-4">All Telemedicine Appointments</h3>
+                                <h3 className="font-bold text-base sm:text-lg mb-4">All Telemedicine Appointments</h3>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm text-left">
                                         <thead className="bg-slate-50 text-slate-500">
                                             <tr>
-                                                <th className="p-3">Date & Time</th>
-                                                <th className="p-3">Doctor</th>
-                                                <th className="p-3">Patient</th>
-                                                <th className="p-3">Status</th>
+                                                <th className="p-2 sm:p-3 text-xs sm:text-sm">Date & Time</th>
+                                                <th className="p-2 sm:p-3 text-xs sm:text-sm hidden md:table-cell">Doctor</th>
+                                                <th className="p-2 sm:p-3 text-xs sm:text-sm">Patient</th>
+                                                <th className="p-2 sm:p-3 text-xs sm:text-sm">Status</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1903,13 +1941,16 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                                     .sort((a, b) => new Date(`${b.date} ${b.time}`).getTime() - new Date(`${a.date} ${a.time}`).getTime())
                                                     .map((apt) => (
                                                         <tr key={apt.id} className="border-b border-slate-100 hover:bg-slate-50">
-                                                            <td className="p-3">
-                                                                <div className="font-medium">{apt.date}</div>
+                                                            <td className="p-2 sm:p-3">
+                                                                <div className="font-medium text-xs sm:text-sm">{apt.date}</div>
                                                                 <div className="text-xs text-slate-500">{apt.time}</div>
                                                             </td>
-                                                            <td className="p-3 font-medium">{apt.doctorName}</td>
-                                                            <td className="p-3">{apt.patientName}</td>
-                                                            <td className="p-3">
+                                                            <td className="p-2 sm:p-3 font-medium text-xs sm:text-sm hidden md:table-cell">{apt.doctorName}</td>
+                                                            <td className="p-2 sm:p-3 text-xs sm:text-sm">
+                                                                <div>{apt.patientName}</div>
+                                                                <div className="text-xs text-slate-500 md:hidden">{apt.doctorName}</div>
+                                                            </td>
+                                                            <td className="p-2 sm:p-3">
                                                                 <Badge color={apt.status === 'CONFIRMED' ? 'green' : apt.status === 'COMPLETED' ? 'blue' : 'yellow'}>
                                                                     {apt.status}
                                                                 </Badge>
@@ -1929,11 +1970,11 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
 
                     {/* --- VIEW: FEEDBACK --- */}
                     {activeView === 'FEEDBACK' && (
-                        <div className="space-y-6 animate-fade-in pb-10">
-                            <div className="flex items-center justify-between">
+                        <div className="space-y-4 sm:space-y-6 animate-fade-in pb-10">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div>
-                                    <h2 className="text-2xl font-bold text-slate-900">Patient Feedback</h2>
-                                    <p className="text-gray-600 mt-1">View and manage patient reviews and ratings</p>
+                                    <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Patient Feedback</h2>
+                                    <p className="text-gray-600 mt-1 text-xs sm:text-sm">View and manage patient reviews and ratings</p>
                                 </div>
                             </div>
 
@@ -1951,23 +1992,23 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                             ) : (
                                 <>
                                     {/* Statistics Cards */}
-                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                                         <Card className="bg-gradient-to-br from-amber-500 to-amber-600 text-white border-0 shadow-lg">
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Average Rating</p>
-                                                    <h3 className="text-3xl font-bold">
-                                                        {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
+                                                    <p className="text-white/80 text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1">Average Rating</p>
+                                                    <h3 className="text-2xl sm:text-3xl font-bold">
+                                                        {feedbackStats?.averageRating || '0.0'}
                                                     </h3>
                                                 </div>
-                                                <Star className="text-white/40" size={40} />
+                                                <Star className="text-white/40" size={32} />
                                             </div>
                                             <div className="mt-2 flex items-center gap-1">
                                                 {[1, 2, 3, 4, 5].map((star) => (
                                                     <Star
                                                         key={star}
-                                                        size={14}
-                                                        className={`${star <= Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length) ? 'text-white fill-white' : 'text-white/40'}`}
+                                                        size={12}
+                                                        className={`${star <= Math.round(parseFloat(feedbackStats?.averageRating || '0')) ? 'text-white fill-white' : 'text-white/40'}`}
                                                     />
                                                 ))}
                                             </div>
@@ -1976,41 +2017,41 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                         <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg">
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Total Reviews</p>
-                                                    <h3 className="text-3xl font-bold">{reviews.length}</h3>
+                                                    <p className="text-white/80 text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1">Total Reviews</p>
+                                                    <h3 className="text-2xl sm:text-3xl font-bold">{feedbackStats?.totalReviews || 0}</h3>
                                                 </div>
-                                                <MessageCircle className="text-white/40" size={40} />
+                                                <MessageCircle className="text-white/40" size={32} />
                                             </div>
-                                            <p className="text-sm text-white/90 mt-2">All time feedback</p>
+                                            <p className="text-xs sm:text-sm text-white/90 mt-2">All time feedback</p>
                                         </Card>
 
                                         <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-lg">
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">Verified Reviews</p>
-                                                    <h3 className="text-3xl font-bold">
-                                                        {reviews.filter(r => r.isVerified).length}
+                                                    <p className="text-white/80 text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1">Verified Reviews</p>
+                                                    <h3 className="text-2xl sm:text-3xl font-bold">
+                                                        {feedbackStats?.verifiedCount || 0}
                                                     </h3>
                                                 </div>
-                                                <CheckCircle className="text-white/40" size={40} />
+                                                <CheckCircle className="text-white/40" size={32} />
                                             </div>
-                                            <p className="text-sm text-white/90 mt-2">
-                                                {((reviews.filter(r => r.isVerified).length / reviews.length) * 100).toFixed(0)}% verified
+                                            <p className="text-xs sm:text-sm text-white/90 mt-2">
+                                                {feedbackStats ? ((feedbackStats.verifiedCount / feedbackStats.totalReviews) * 100).toFixed(0) : 0}% verified
                                             </p>
                                         </Card>
 
                                         <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg">
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <p className="text-white/80 text-xs font-medium uppercase tracking-wide mb-1">5-Star Reviews</p>
-                                                    <h3 className="text-3xl font-bold">
-                                                        {reviews.filter(r => r.rating === 5).length}
+                                                    <p className="text-white/80 text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1">5-Star Reviews</p>
+                                                    <h3 className="text-2xl sm:text-3xl font-bold">
+                                                        {feedbackStats?.fiveStarCount || 0}
                                                     </h3>
                                                 </div>
-                                                <TrendingUp className="text-white/40" size={40} />
+                                                <TrendingUp className="text-white/40" size={32} />
                                             </div>
-                                            <p className="text-sm text-white/90 mt-2">
-                                                {((reviews.filter(r => r.rating === 5).length / reviews.length) * 100).toFixed(0)}% excellent
+                                            <p className="text-xs sm:text-sm text-white/90 mt-2">
+                                                {feedbackStats ? ((feedbackStats.fiveStarCount / feedbackStats.totalReviews) * 100).toFixed(0) : 0}% excellent
                                             </p>
                                         </Card>
                                     </div>
@@ -2019,26 +2060,22 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                     <Card className="shadow-lg">
                                         <h3 className="text-lg font-bold text-slate-900 mb-4">Rating Distribution</h3>
                                         <div className="space-y-3">
-                                            {[5, 4, 3, 2, 1].map((rating) => {
-                                                const count = reviews.filter(r => r.rating === rating).length;
-                                                const percentage = (count / reviews.length) * 100;
-                                                return (
-                                                    <div key={rating} className="flex items-center gap-3">
-                                                        <div className="flex items-center gap-1 w-16">
-                                                            <span className="text-sm font-semibold text-slate-700">{rating}</span>
-                                                            <Star size={14} className="text-amber-400 fill-amber-400" />
-                                                        </div>
-                                                        <div className="flex-1 h-4 bg-slate-200 rounded-full overflow-hidden">
-                                                            <div
-                                                                className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all"
-                                                                style={{ width: `${percentage}%` }}
-                                                            ></div>
-                                                        </div>
-                                                        <span className="text-sm font-medium text-slate-600 w-12 text-right">{count}</span>
-                                                        <span className="text-xs text-slate-500 w-12 text-right">({percentage.toFixed(0)}%)</span>
+                                            {feedbackStats?.ratingDistribution.map(({ rating, count, percentage }) => (
+                                                <div key={rating} className="flex items-center gap-3">
+                                                    <div className="flex items-center gap-1 w-16">
+                                                        <span className="text-sm font-semibold text-slate-700">{rating}</span>
+                                                        <Star size={14} className="text-amber-400 fill-amber-400" />
                                                     </div>
-                                                );
-                                            })}
+                                                    <div className="flex-1 h-4 bg-slate-200 rounded-full overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all"
+                                                            style={{ width: `${percentage}%` }}
+                                                        ></div>
+                                                    </div>
+                                                    <span className="text-sm font-medium text-slate-600 w-12 text-right">{count}</span>
+                                                    <span className="text-xs text-slate-500 w-12 text-right">({percentage.toFixed(0)}%)</span>
+                                                </div>
+                                            )) || null}
                                         </div>
                                     </Card>
 
@@ -2068,10 +2105,10 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
                                     <div>
                                         <div className="flex justify-between items-center mb-4">
                                             <h3 className="text-lg font-bold text-slate-900">Recent Reviews</h3>
-                                            <span className="text-sm text-slate-500">{reviews.length} total reviews</span>
+                                            <span className="text-sm text-slate-500">Showing {Math.min(reviewsPerPage, reviews.length - (currentReviewPage - 1) * reviewsPerPage)} of {reviews.length} reviews</span>
                                         </div>
                                         <div className="grid gap-4">
-                                            {reviews.map((review) => (
+                                            {paginatedReviews.map((review) => (
                                                 <Card key={review.id} className="shadow-md hover:shadow-lg transition-all">
                                                     <div className="flex gap-4">
                                                         {/* Avatar */}
