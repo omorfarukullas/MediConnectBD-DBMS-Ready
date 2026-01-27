@@ -21,14 +21,14 @@ interface PatientPortalProps {
   currentUser?: UserType;
   onNavigate: (view: string) => void;
   onBack: () => void;
-  initialMode?: 'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES' | 'TELEMEDICINE';
+  initialMode?: 'DASHBOARD' | 'PHYSICAL_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES' | 'TELEMEDICINE';
 }
 
 export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNavigate, onBack, initialMode = 'DASHBOARD' }) => {
   console.log('🎯 PatientPortal component rendering...', { currentUser, initialMode });
 
   // View State
-  const [viewMode, setViewMode] = useState<'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES' | 'TELEMEDICINE'>(initialMode);
+  const [viewMode, setViewMode] = useState<'DASHBOARD' | 'PHYSICAL_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY' | 'HOSPITAL_RESOURCES' | 'TELEMEDICINE'>(initialMode);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Data Loading State
@@ -411,7 +411,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
 
       // Close modal and navigate to My Appointments
       setIsBookingModalOpen(false);
-      setViewMode('MY_APPOINTMENTS');
+      setViewMode('PHYSICAL_APPOINTMENTS');
       onNavigate('patient_appointments');
 
       console.log('✅ Redirected to My Appointments');
@@ -559,7 +559,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
         // But assuming onNavigate updates URL or parent state:
         const route =
           view === 'DASHBOARD' ? 'patient' :
-            view === 'MY_APPOINTMENTS' ? 'patient_appointments' :
+            view === 'PHYSICAL_APPOINTMENTS' ? 'patient_appointments' :
               view === 'SETTINGS' ? 'patient_settings' :
                 view === 'TELEMEDICINE' ? 'patient_telemedicine' :
                   view === 'HOSPITAL_RESOURCES' ? 'patient_resources' :
@@ -591,7 +591,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <SidebarItem view="DASHBOARD" icon={<Home size={18} />} label="Find Doctor" />
-          <SidebarItem view="MY_APPOINTMENTS" icon={<Calendar size={18} />} label="My Appointments" />
+          <SidebarItem view="PHYSICAL_APPOINTMENTS" icon={<Calendar size={18} />} label="My Appointments" />
           <SidebarItem view="TELEMEDICINE" icon={<Video size={18} />} label="Telemedicine" />
           <SidebarItem view="MEDICAL_HISTORY" icon={<FileText size={18} />} label="Medical History" />
           <SidebarItem view="HOSPITAL_RESOURCES" icon={<Building2 size={18} />} label="Hospital Resources" />
@@ -624,8 +624,8 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
             <div>
               <h2 className="text-xl md:text-2xl font-bold text-slate-900">
                 {viewMode === 'DASHBOARD' ? 'Find Doctor' :
-                  viewMode === 'MY_APPOINTMENTS' ? 'My Appointments' :
-                    viewMode === 'TELEMEDICINE' ? 'Telemedicine Portal' :
+                  viewMode === 'PHYSICAL_APPOINTMENTS' ? 'My Appointments' :
+                    viewMode === 'TELEMEDICINE' ? 'Telemedicine' :
                       viewMode === 'MEDICAL_HISTORY' ? 'Medical Records' :
                         viewMode === 'HOSPITAL_RESOURCES' ? 'Hospital Resources' : 'Settings'}
               </h2>
@@ -661,6 +661,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
               <HospitalResourcesView />
             </div>
           )}
+
 
           {/* --- VIEW: TELEMEDICINE --- */}
           {viewMode === 'TELEMEDICINE' && (
@@ -979,8 +980,8 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
             </div>
           )}
 
-          {/* --- VIEW: MY APPOINTMENTS --- */}
-          {viewMode === 'MY_APPOINTMENTS' && (
+          {/* --- VIEW: PHYSICAL APPOINTMENTS --- */}
+          {viewMode === 'PHYSICAL_APPOINTMENTS' && (
             <div className="space-y-6 animate-fade-in pb-20">
               <Card>
                 <div className="space-y-4">
@@ -1085,7 +1086,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                   ) : (
                     <div className="text-center py-16 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                       <Calendar size={48} className="mx-auto text-slate-300 mb-4" />
-                      <p className="text-slate-500 font-medium">No appointments scheduled.</p>
+                      <p className="text-slate-500 font-medium">No physical appointments scheduled.</p>
                       <Button variant="outline" className="mt-4" onClick={() => setViewMode('DASHBOARD')}>Book an Appointment</Button>
                     </div>
                   )}
@@ -1314,8 +1315,10 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                       const appointmentsData = response.data || response;
                       setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
                     });
-                    // Navigate to My Appointments
-                    setViewMode('MY_APPOINTMENTS');
+                  }}
+                  onAppointmentUpdate={(newList) => {
+                    setAppointments(newList);
+                    setViewMode('PHYSICAL_APPOINTMENTS');
                   }}
                 />
               )}

@@ -87,21 +87,24 @@ const getAvailableSlots = async (req, res) => {
         const [bookingCounts] = await pool.execute(`
             SELECT 
                 appointment_date, 
-                appointment_time, 
+                appointment_time,
+                consultation_type,
                 COUNT(*) as book_count
             FROM appointments
             WHERE doctor_id = ? 
             AND appointment_date BETWEEN ? AND ?
             AND status != 'CANCELLED'
-            GROUP BY appointment_date, appointment_time
+            GROUP BY appointment_date, appointment_time, consultation_type
         `, [doctorId, start.toISOString().split('T')[0], end.toISOString().split('T')[0]]);
 
-        // Create a fast lookup map: "YYYY-MM-DD_HH:mm" -> count
+        // Create a fast lookup map: "YYYY-MM-DD_HH:mm_TYPE" -> count
         const bookingMap = {};
         bookingCounts.forEach(b => {
             const dateStr = b.appointment_date.toISOString().split('T')[0];
             const timeStr = b.appointment_time.substring(0, 5);
-            bookingMap[`${dateStr}_${timeStr}`] = b.book_count;
+            const type = b.consultation_type;
+            // Key includes consultation type for accurate per-type counting
+            bookingMap[`${dateStr}_${timeStr}_${type}`] = b.book_count;
         });
 
         // 4. Generate Available Sessions
@@ -127,8 +130,14 @@ const getAvailableSlots = async (req, res) => {
                     const startHM = sched.start_time.substring(0, 5);
                     const endHM = sched.end_time.substring(0, 5);
 
-                    // Identify bookings for this specific session
-                    const currentBookings = bookingMap[`${dateStr}_${startHM}`] || 0;
+                    // Determine the consultation type for this slot
+                    const slotType = sched.consultation_type === 'BOTH' && req.query.appointmentType
+                        ? req.query.appointmentType.toUpperCase()
+                        : sched.consultation_type;
+
+                    // Get bookings for this specific type (CRITICAL: per-type counting)
+                    const mapKey = `${dateStr}_${startHM}_${slotType}`;
+                    const currentBookings = bookingMap[mapKey] || 0;
                     const maxPatients = sched.max_patients || 40; // Default if not set
 
                     const idString = `${sched.id}${dateStr.replace(/-/g, '')}${startHM.replace(':', '')}`;

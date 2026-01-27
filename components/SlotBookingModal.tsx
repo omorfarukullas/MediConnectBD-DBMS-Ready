@@ -70,7 +70,7 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
         setError('');
         try {
             const response = await api.get<{ success: boolean; slotsByDate: SessionsByDate; slots: Session[] }>(
-                `/slots/available/${doctorId}?appointmentType=${appointmentType}`
+                `/slots/available/${doctorId}?appointmentType=${appointmentType}&_t=${Date.now()}`
             );
 
             if (response.data.success) {
@@ -124,6 +124,14 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
             if (response.data.success) {
                 setBookedAppointment(response.data.appointment);
                 setStep('success');
+
+                // Refresh slots in background to show updated availability
+                try {
+                    await fetchSessions();
+                } catch (err) {
+                    console.error('Failed to refresh slots:', err);
+                }
+
                 onBookingComplete(response.data.appointment);
             }
         } catch (err: any) {
@@ -438,14 +446,14 @@ export const SlotBookingModal: React.FC<SlotBookingModalProps> = ({
                                         <Calendar className="text-blue-600" size={20} />
                                         <div>
                                             <p className="text-sm text-gray-600">Date</p>
-                                            <p className="font-semibold">{formatFullDate(bookedAppointment.appointmentDate)}</p>
+                                            <p className="font-semibold">{formatFullDate(bookedAppointment.date)}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <Clock className="text-blue-600" size={20} />
                                         <div>
                                             <p className="text-sm text-gray-600">Time</p>
-                                            <p className="font-semibold">{formatTime(bookedAppointment.appointmentTime)}</p>
+                                            <p className="font-semibold">{bookedAppointment.time || 'N/A'}</p>
                                         </div>
                                     </div>
                                     {bookedAppointment.queueNumber && (

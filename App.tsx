@@ -210,7 +210,7 @@ const App = () => {
 
     switch (currentView) {
       case 'patient': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="DASHBOARD" />;
-      case 'patient_appointments': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="MY_APPOINTMENTS" />;
+      case 'patient_appointments': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="PHYSICAL_APPOINTMENTS" />;
       case 'patient_settings': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="SETTINGS" />;
       case 'medical_history': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="MEDICAL_HISTORY" />;
       case 'patient_telemedicine': return <PatientPortal currentUser={currentUser} onNavigate={handleNavigate} onBack={handleLogout} initialMode="TELEMEDICINE" />;

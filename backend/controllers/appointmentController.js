@@ -138,18 +138,14 @@ const bookAppointment = async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // Step 0: Get Patient ID from User ID
-        const [patientData] = await connection.execute(
-            'SELECT id FROM patients WHERE user_id = ?',
-            [req.user.id]
-        );
+        // Step 0: Get Patient ID from authenticated user
+        // Auth middleware already sets req.user.profile_id with the patient's ID
+        const patientId = req.user.profile_id;
 
-        if (patientData.length === 0) {
+        if (!patientId) {
             await connection.rollback();
             return res.status(404).json({ message: 'Patient profile not found. Please complete your profile.' });
         }
-
-        const patientId = patientData[0].id;
 
         // Step 1: Parse Synthetic Slot ID
         // Format: [RuleID][YYYYMMDD][HHMM]
@@ -227,14 +223,15 @@ const bookAppointment = async (req, res) => {
         console.log(`✅ Consultation Type Validation: Slot=${rule.consultation_type}, Requested=${requestedType}, Final=${finalConsultationType}`);
 
         // Step 3: Check Current Capacity for this Session
-        // We count appointments for this doctor + date + time (session start)
+        // Count appointments for this doctor + date + time + TYPE (critical fix)
         const [counts] = await connection.execute(
             `SELECT COUNT(*) as count FROM appointments 
              WHERE doctor_id = ? 
              AND appointment_date = ? 
              AND appointment_time = ? 
+             AND consultation_type = ?
              AND status != 'CANCELLED'`,
-            [doctorId, appointmentDate, appointmentTime]
+            [doctorId, appointmentDate, appointmentTime, finalConsultationType]
         );
 
         const currentBookings = counts[0].count;
@@ -248,18 +245,23 @@ const bookAppointment = async (req, res) => {
             });
         }
 
-        // Step 4: Check if patient already has an appointment in this session
+        // Step 4: Check if patient already has an appointment in this session OF THIS TYPE
+        // Physical and telemedicine are separate, so only check for same type
         const [patientBooking] = await connection.execute(
             `SELECT id FROM appointments 
-             WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? AND status != 'CANCELLED'`,
-            [patientId, appointmentDate, appointmentTime]
+             WHERE patient_id = ? 
+             AND appointment_date = ? 
+             AND appointment_time = ? 
+             AND consultation_type = ?
+             AND status != 'CANCELLED'`,
+            [patientId, appointmentDate, appointmentTime, finalConsultationType]
         );
 
         if (patientBooking.length > 0) {
             await connection.rollback();
             return res.status(409).json({
                 success: false,
-                message: 'You already have an appointment in this session.'
+                message: `You already have a ${finalConsultationType.toLowerCase()} appointment in this session.`
             });
         }
 
@@ -326,9 +328,9 @@ const bookAppointment = async (req, res) => {
                 specialization: rule.specialization,
                 slotId: slotId,
                 date: appointmentDate,
-                startTime: appointmentTime,
-                endTime: rule.end_time, // Return session end time
+                time: appointmentTime, // Changed from startTime to match frontend
                 appointmentType: finalConsultationType, // Return actual booked type
+                consultationType: finalConsultationType, // Also add this for compatibility
                 consultationFee: rule.consultation_fee,
                 status: 'CONFIRMED',
                 queueNumber: queueNumber,
