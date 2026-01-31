@@ -430,7 +430,7 @@ cd ..
 
 **Create Database:**
 ```sql
-CREATE DATABASE mediconnect CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE mediconnectbdv2 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 **Run Migrations:**
