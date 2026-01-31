@@ -55,7 +55,10 @@ app.use(cors({
             'http://127.0.0.1:3000', 'http://127.0.0.1:3001', 'http://127.0.0.1:3002', 'http://127.0.0.1:5173',
             'http://localhost:5173',
             'http://192.168.1.6:3000', // Allow specific LAN IP
-            'http://192.168.1.6:5173'
+            'http://192.168.1.6:5173',
+            'http://10.15.11.54:3000',
+            'http://10.15.11.54:5173',
+            'http://10.15.11.54:5000'
         ];
 
         if (allowedOrigins.indexOf(origin) !== -1 || true) { // TEMPORARY: Allow all for debugging
